@@ -4,16 +4,23 @@ bin/
 *.dll
 *.so
 *.dylib
+*.app/
+*.noindex/
+dist/
 
 # Data & logs
 data/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.log
 
 # OS files
 .DS_Store
 
-# IDE
+# IDE & Tooling
 .idea/
 .vscode/
+.superpowers/
+
