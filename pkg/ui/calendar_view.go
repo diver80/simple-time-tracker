@@ -127,6 +127,14 @@ func (cv *CalendarView) openEditor(entry *db.TimeEntry) {
 	}
 }
 
+// openEditorWithTimes opens the editor for creating a new entry with pre-filled times.
+func (cv *CalendarView) openEditorWithTimes(start, end time.Time) {
+	cv.openEditor(nil)
+	if cv.editor != nil {
+		cv.editor.SetTimes(start, end)
+	}
+}
+
 func (cv *CalendarView) Refresh() {
 	entries, err := cv.repo.ListEntriesForDay(cv.currentDay)
 	if err == nil {
@@ -434,6 +442,28 @@ func (cv *CalendarView) Event(ctx widget.Context, e event.Event) bool {
 								return true
 							}
 						}
+					}
+				}
+
+				// Check if click was in timeline content area
+				b := cv.Bounds()
+				navY := b.Min.Y + 12
+				actionY := navY + 36
+				contentTop := actionY + 36
+				contentBottom := b.Max.Y - 50
+				timelineGutterX := b.Min.X + 54
+				totalHours := float32(dayEndHour - dayStartHour)
+				hourHeight := (contentBottom - contentTop) / totalHours
+
+				if ev.Position.X >= timelineGutterX && ev.Position.X <= b.Max.X-16 &&
+					ev.Position.Y >= contentTop && ev.Position.Y <= contentBottom {
+					hourFraction := (ev.Position.Y - contentTop) / hourHeight
+					clickedHour := dayStartHour + int(hourFraction)
+					if clickedHour >= dayStartHour && clickedHour < dayEndHour {
+						start := time.Date(cv.currentDay.Year(), cv.currentDay.Month(), cv.currentDay.Day(), clickedHour, 0, 0, 0, time.Local)
+						end := start.Add(1 * time.Hour)
+						cv.openEditorWithTimes(start, end)
+						return true
 					}
 				}
 			}

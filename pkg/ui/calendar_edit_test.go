@@ -672,3 +672,152 @@ func TestBillableToggleHitRect(t *testing.T) {
 		t.Error("Billable toggle should change on click")
 	}
 }
+
+func TestCalendarTimelineClickToCreate(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	cv := NewCalendarView(repo, nil)
+	cv.SetBounds(geometry.NewRect(0, 0, 420, 640))
+
+	mockCtx := &testWidgetContext{}
+	cv.Draw(mockCtx, &testCanvas{})
+
+	// Simulate clicking on the timeline at 14:00 (Y coordinate inside content area)
+	// Day starts at 7, ends at 21. Content top is ~84, bottom is ~590.
+	contentTop := float32(84)
+	contentBottom := float32(590)
+	hourHeight := (contentBottom - contentTop) / float32(dayEndHour-dayStartHour)
+	targetY := contentTop + float32(14-dayStartHour)*hourHeight + 10
+
+	clickPt := geometry.Pt(100, targetY)
+	pressEv := event.NewMouseEvent(event.MousePress, event.ButtonLeft, 0, clickPt, clickPt, event.ModNone)
+
+	handled := cv.Event(mockCtx, pressEv)
+	if !handled || cv.editor == nil {
+		t.Fatalf("expected clicking timeline slot to open editor, handled=%v, editor=%v", handled, cv.editor)
+	}
+
+	startStr := cv.editor.startDTInput.Text()
+	if !strings.Contains(startStr, "14:00") {
+		t.Errorf("expected editor start time to be 14:00, got: %s", startStr)
+	}
+}
+
+func TestEntryEditorQuickDurationButtons(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.Local)
+	editor := NewEntryEditor(repo, nil, day, nil, func() {}, func() {})
+
+	start := time.Date(2026, 9, 19, 14, 0, 0, 0, time.Local)
+	end := time.Date(2026, 9, 19, 15, 0, 0, 0, time.Local)
+	editor.startDTInput.SetText(start.Format("02.01.2006 15:04:05"))
+	editor.endDTInput.SetText(end.Format("02.01.2006 15:04:05"))
+
+	// Test +15m button
+	if editor.plus15Btn == nil {
+		t.Fatal("plus15Btn should not be nil")
+	}
+	editor.plus15Btn.onClick()
+	if !strings.Contains(editor.endDTInput.Text(), "15:15:00") {
+		t.Errorf("expected end time 15:15:00 after +15m, got: %s", editor.endDTInput.Text())
+	}
+
+	// Test +30m button
+	if editor.plus30Btn == nil {
+		t.Fatal("plus30Btn should not be nil")
+	}
+	editor.plus30Btn.onClick()
+	if !strings.Contains(editor.endDTInput.Text(), "15:45:00") {
+		t.Errorf("expected end time 15:45:00 after +30m, got: %s", editor.endDTInput.Text())
+	}
+
+	// Test +1h button
+	if editor.plus60Btn == nil {
+		t.Fatal("plus60Btn should not be nil")
+	}
+	editor.plus60Btn.onClick()
+	if !strings.Contains(editor.endDTInput.Text(), "16:45:00") {
+		t.Errorf("expected end time 16:45:00 after +1h, got: %s", editor.endDTInput.Text())
+	}
+}
+
+func TestEntryEditorQuickDurationButtonsViaMouseEvent(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.Local)
+	editor := NewEntryEditor(repo, nil, day, nil, func() {}, func() {})
+	editor.SetBounds(geometry.NewRect(0, 0, 400, 600))
+
+	mockCtx := &testWidgetContext{}
+	editor.Draw(mockCtx, &testCanvas{})
+
+	start := time.Date(2026, 9, 19, 10, 0, 0, 0, time.Local)
+	end := time.Date(2026, 9, 19, 11, 0, 0, 0, time.Local)
+	editor.startDTInput.SetText(start.Format("02.01.2006 15:04:05"))
+	editor.endDTInput.SetText(end.Format("02.01.2006 15:04:05"))
+
+	// Click +15m button via mouse event
+	b15 := editor.plus15Btn.Bounds()
+	clickPt := geometry.Pt(b15.Min.X+5, b15.Min.Y+5)
+	pressEv := event.NewMouseEvent(event.MousePress, event.ButtonLeft, 0, clickPt, clickPt, event.ModNone)
+	handled := editor.Event(mockCtx, pressEv)
+	if !handled {
+		t.Fatal("expected clicking +15m button to be handled")
+	}
+	if !strings.Contains(editor.endDTInput.Text(), "11:15:00") {
+		t.Errorf("expected end time 11:15:00, got: %s", editor.endDTInput.Text())
+	}
+}
+
+func TestEntryEditorTabFocusCycle(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.Local)
+	editor := NewEntryEditor(repo, nil, day, nil, func() {}, func() {})
+	mockCtx := &testWidgetContext{}
+
+	// Focus taskInput initially
+	editor.taskInput.SetFocused(true)
+	mockCtx.RequestFocus(editor.taskInput)
+
+	tabEv := event.NewKeyEvent(event.KeyPress, event.KeyTab, 0, event.ModNone)
+
+	// Tab 1: taskInput -> notesInput
+	handled := editor.Event(mockCtx, tabEv)
+	if !handled {
+		t.Fatal("expected Tab key event to be handled")
+	}
+	if !editor.notesInput.IsFocused() || editor.taskInput.IsFocused() {
+		t.Errorf("expected notesInput to be focused, got task=%v, notes=%v", editor.taskInput.IsFocused(), editor.notesInput.IsFocused())
+	}
+
+	// Tab 2: notesInput -> startDTInput
+	editor.Event(mockCtx, tabEv)
+	if !editor.startDTInput.IsFocused() || editor.notesInput.IsFocused() {
+		t.Errorf("expected startDTInput to be focused, got notes=%v, start=%v", editor.notesInput.IsFocused(), editor.startDTInput.IsFocused())
+	}
+
+	// Tab 3: startDTInput -> endDTInput
+	editor.Event(mockCtx, tabEv)
+	if !editor.endDTInput.IsFocused() || editor.startDTInput.IsFocused() {
+		t.Errorf("expected endDTInput to be focused, got start=%v, end=%v", editor.startDTInput.IsFocused(), editor.endDTInput.IsFocused())
+	}
+
+	// Tab 4: endDTInput -> taskInput (cycle back)
+	editor.Event(mockCtx, tabEv)
+	if !editor.taskInput.IsFocused() || editor.endDTInput.IsFocused() {
+		t.Errorf("expected taskInput to be focused after cycle, got end=%v, task=%v", editor.endDTInput.IsFocused(), editor.taskInput.IsFocused())
+	}
+
+	// Shift+Tab: taskInput -> endDTInput (reverse cycle)
+	shiftTabEv := event.NewKeyEvent(event.KeyPress, event.KeyTab, 0, event.ModShift)
+	editor.Event(mockCtx, shiftTabEv)
+	if !editor.endDTInput.IsFocused() || editor.taskInput.IsFocused() {
+		t.Errorf("expected endDTInput to be focused on Shift+Tab, got task=%v, end=%v", editor.taskInput.IsFocused(), editor.endDTInput.IsFocused())
+	}
+}
