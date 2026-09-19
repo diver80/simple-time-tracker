@@ -3,7 +3,6 @@ package timer
 import (
 	"path/filepath"
 	"testing"
-	"time"
 
 	"time-tracker/pkg/db"
 )
@@ -46,8 +45,6 @@ func TestTimerServiceWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to update booking text: %v", err)
 	}
-	time.Sleep(300 * time.Millisecond) // wait for debounce
-
 	dbEntry, err := repo.GetEntry(started.ID)
 	if err != nil || dbEntry.BookingText != "Added initial unit tests" {
 		t.Fatalf("booking text was not persisted to DB, got: %s (err: %v)", dbEntry.BookingText, err)

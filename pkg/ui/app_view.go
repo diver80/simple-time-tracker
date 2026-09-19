@@ -166,11 +166,8 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	}).SetCompact(true)
 
 	// Hook timer tick to keep the top nav bar timer always visible across all tabs
+	// OnTick only requests redraw; actual state update happens in Draw via refreshTimerState
 	a.timerSvc.OnTick(func(elapsed time.Duration, state timer.TimerState, entry *db.TimeEntry) {
-		a.timerElapsed = elapsed
-		a.timerState = state
-		a.activeEntry = entry
-		a.updateTrackerTabLabel()
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
 		}
@@ -181,6 +178,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.updateTrackerTabLabel()
 
 	return a
+}
+
+func (a *AppView) refreshTimerState() {
+	// Called on UI thread from Draw to safely fetch and cache timer state
+	a.timerState, a.activeEntry, a.timerElapsed = a.timerSvc.GetCurrentState()
+	a.updateTrackerTabLabel()
 }
 
 func (a *AppView) updateTrackerTabLabel() {
@@ -253,6 +256,9 @@ func (a *AppView) Layout(ctx widget.Context, c geometry.Constraints) geometry.Si
 }
 
 func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
+	// Refresh timer state on UI thread to avoid race with ticker goroutine
+	a.refreshTimerState()
+
 	b := a.Bounds()
 	theme := DefaultDarkTheme
 
@@ -398,7 +404,17 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 }
 
-func (a *AppView) Event(ctx widget.Context, e event.Event) bool {
+func (a *AppView) Event(ctx widget.Context, e event.Event) (handled bool) {
+	// These views draw their children manually, so the root owns their cached
+	// scene. A handled input must invalidate it, not merely wake the OS window.
+	defer func() {
+		if handled {
+			a.SetNeedsRedraw(true)
+			if a.onRequestRedraw != nil {
+				a.onRequestRedraw()
+			}
+		}
+	}()
 	// Screen Sharing Shield Button
 	if a.tabShieldBtn.Event(ctx, e) {
 		return true

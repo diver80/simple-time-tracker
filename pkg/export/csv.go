@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
+	"unicode"
 
 	"time-tracker/pkg/db"
 	"time-tracker/pkg/timer"
@@ -29,6 +31,23 @@ type MonthlySummary struct {
 	FormattedTotal string
 }
 
+// sanitizeForSpreadsheet guards against formula injection in spreadsheet applications.
+// It checks for formula-trigger characters (=, +, -, @, tab, CR, LF) after leading spaces,
+// and prefixes the original (non-trimmed) string with a single quote if found.
+// Ordinary leading-space text is kept unchanged.
+func sanitizeForSpreadsheet(s string) string {
+	for _, ch := range s {
+		switch ch {
+		case '=', '+', '-', '@', '\t', '\r', '\n':
+			return "'" + s
+		}
+		if !unicode.IsSpace(ch) {
+			break
+		}
+	}
+	return s
+}
+
 // GenerateMonthlyCSV generates a CSV representation of the monthly time bookings.
 func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *MonthlySummary, error) {
 	entries, err := repo.ListEntriesForMonth(opts.Year, opts.Month, opts.CustomerID, opts.ProjectID)
@@ -38,7 +57,10 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 
 	// Cache project hourly rates
 	projectRates := make(map[int64]float64)
-	allProjects, _ := repo.ListProjects(nil)
+	allProjects, err := repo.ListProjects(nil)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to list projects: %w", err)
+	}
 	for _, p := range allProjects {
 		projectRates[p.ID] = p.HourlyRate
 	}
@@ -70,15 +92,20 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 	}
 
 	summary := &MonthlySummary{}
+	var totalRoundedDuration time.Duration
+	var totalBillableRoundedDuration time.Duration
+	var totalRevenueCents int64
 
 	for _, e := range entries {
 		summary.TotalEntries++
 
-		dateStr := e.StartedAt.Format("2006-01-02")
-		startStr := e.StartedAt.Format("15:04")
+		// Use local display timestamps matching local monthly boundaries
+		localStarted := e.StartedAt.Local()
+		dateStr := localStarted.Format("2006-01-02")
+		startStr := localStarted.Format("15:04")
 		endStr := ""
 		if e.EndedAt != nil {
-			endStr = e.EndedAt.Format("15:04")
+			endStr = e.EndedAt.Local().Format("15:04")
 		}
 
 		rawDur := time.Duration(e.DurationSec) * time.Second
@@ -89,22 +116,26 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 		rate := 0.0
 		lineTotal := 0.0
 
-		summary.TotalHours += decHours
+		// Track total durations using rounded values to avoid drift
+		totalRoundedDuration += roundedDur
 		if e.IsBillable {
 			billableStr = "Ja"
-			summary.BillableHours += decHours
+			totalBillableRoundedDuration += roundedDur
 			if e.ProjectID != nil {
 				rate = projectRates[*e.ProjectID]
-				lineTotal = decHours * rate
-				summary.TotalRevenue += lineTotal
+				// Compute revenue from roundedDur.Hours() * rate, rounded to cents
+				lineRevenue := roundedDur.Hours() * rate
+				lineCents := int64(math.Round(lineRevenue * 100))
+				lineTotal = float64(lineCents) / 100
+				totalRevenueCents += lineCents
 			}
 		}
 
-		custName := e.CustomerName
+		custName := sanitizeForSpreadsheet(e.CustomerName)
 		if custName == "" {
 			custName = "-"
 		}
-		projName := e.ProjectName
+		projName := sanitizeForSpreadsheet(e.ProjectName)
 		if projName == "" {
 			projName = "-"
 		}
@@ -113,8 +144,8 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 			dateStr,
 			custName,
 			projName,
-			e.TaskName,
-			e.BookingText,
+			sanitizeForSpreadsheet(e.TaskName),
+			sanitizeForSpreadsheet(e.BookingText),
 			startStr,
 			endStr,
 			timer.FormatDurationHHMM(roundedDur),
@@ -128,7 +159,12 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 		}
 	}
 
-	// Total row
+	summary.TotalRevenue = float64(totalRevenueCents) / 100
+	// Calculate totals from accumulated rounded durations
+	summary.TotalHours = timer.DecimalHours(totalRoundedDuration)
+	summary.BillableHours = timer.DecimalHours(totalBillableRoundedDuration)
+
+	// Total row - use accumulated rounded duration for consistency
 	summaryRow := []string{
 		"SUMME",
 		"",
@@ -137,20 +173,22 @@ func GenerateMonthlyCSV(repo db.Repository, opts ExportOptions) (string, *Monthl
 		"",
 		"",
 		"",
-		timer.FormatDurationHHMM(time.Duration(summary.TotalHours * float64(time.Hour))),
+		timer.FormatDurationHHMM(totalRoundedDuration),
 		fmt.Sprintf("%.2f", summary.TotalHours),
 		"",
 		"",
 		fmt.Sprintf("%.2f", summary.TotalRevenue),
 	}
-	_ = writer.Write(summaryRow)
+	if err := writer.Write(summaryRow); err != nil {
+		return "", nil, err
+	}
 
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		return "", nil, err
 	}
 
-	summary.FormattedTotal = timer.FormatDurationHHMM(time.Duration(summary.TotalHours * float64(time.Hour)))
+	summary.FormattedTotal = timer.FormatDurationHHMM(totalRoundedDuration)
 	return buf.String(), summary, nil
 }
 

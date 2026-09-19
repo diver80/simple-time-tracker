@@ -15,16 +15,16 @@ type dummyWinMgr struct {
 	shieldEnabled  bool
 }
 
-func (d *dummyWinMgr) InitStatusItem(cb window.StatusCallbacks)     {}
-func (d *dummyWinMgr) UpdateStatusTitle(title string)               {}
-func (d *dummyWinMgr) SetWindowSize(w, h int)                       {}
-func (d *dummyWinMgr) TogglePopover(w, h int)                       {}
-func (d *dummyWinMgr) ShowPopover(w, h int)                         {}
-func (d *dummyWinMgr) HidePopover()                                 {}
-func (d *dummyWinMgr) IsVisible() bool                              { return true }
-func (d *dummyWinMgr) SetScreenShareShield(enable bool)             { d.shieldEnabled = enable }
-func (d *dummyWinMgr) IsScreenShareShieldEnabled() bool             { return d.shieldEnabled }
-func (d *dummyWinMgr) TempHide(duration time.Duration)              { d.hiddenDuration = duration }
+func (d *dummyWinMgr) InitStatusItem(cb window.StatusCallbacks) {}
+func (d *dummyWinMgr) UpdateStatusTitle(title string)           {}
+func (d *dummyWinMgr) SetWindowSize(w, h int)                   {}
+func (d *dummyWinMgr) TogglePopover(w, h int)                   {}
+func (d *dummyWinMgr) ShowPopover(w, h int)                     {}
+func (d *dummyWinMgr) HidePopover()                             {}
+func (d *dummyWinMgr) IsVisible() bool                          { return true }
+func (d *dummyWinMgr) SetScreenShareShield(enable bool)         { d.shieldEnabled = enable }
+func (d *dummyWinMgr) IsScreenShareShieldEnabled() bool         { return d.shieldEnabled }
+func (d *dummyWinMgr) TempHide(duration time.Duration)          { d.hiddenDuration = duration }
 
 func TestAppViewNavBarTimerVisibility(t *testing.T) {
 	repo, err := db.NewRepository(":memory:")
@@ -36,10 +36,7 @@ func TestAppViewNavBarTimerVisibility(t *testing.T) {
 	timerSvc := timer.NewTimerService(repo)
 	defer timerSvc.Close()
 
-	redrawCount := 0
-	appView := NewAppView(repo, timerSvc, nil, func() {
-		redrawCount++
-	})
+	appView := NewAppView(repo, timerSvc, nil, func() {})
 
 	// 1. Initial idle state: tab button should say "⏱️ Tracker"
 	if appView.tabTrackerBtn.text != "⏱️ Tracker" {
@@ -58,8 +55,8 @@ func TestAppViewNavBarTimerVisibility(t *testing.T) {
 		t.Errorf("Expected active tab TabCalendar, got %v", appView.activeTab)
 	}
 
-	// Wait for ticker tick or trigger updateTrackerTabLabel
-	time.Sleep(600 * time.Millisecond)
+	// Refresh timer state on UI thread (simulating Draw)
+	appView.refreshTimerState()
 
 	// In the nav bar, the tracker tab button must now display the running time (e.g. "⏱️ 00:00:00" or "⏱️ 00:00:01")
 	if !strings.HasPrefix(appView.tabTrackerBtn.text, "⏱️ 00:") {
@@ -71,7 +68,9 @@ func TestAppViewNavBarTimerVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start QuickShift: %v", err)
 	}
-	time.Sleep(600 * time.Millisecond)
+
+	// Refresh timer state on UI thread (simulating Draw)
+	appView.refreshTimerState()
 
 	// Button must now show QuickShift lightning indicator
 	if !strings.HasPrefix(appView.tabTrackerBtn.text, "⚡ 00:") {
@@ -80,7 +79,9 @@ func TestAppViewNavBarTimerVisibility(t *testing.T) {
 
 	// Finish QuickShift
 	_ = timerSvc.FinishQuickShift()
-	time.Sleep(600 * time.Millisecond)
+
+	// Refresh timer state on UI thread (simulating Draw)
+	appView.refreshTimerState()
 
 	if !strings.HasPrefix(appView.tabTrackerBtn.text, "⏱️ 00:") {
 		t.Errorf("Expected nav bar button to resume running time, got '%s'", appView.tabTrackerBtn.text)
@@ -88,7 +89,9 @@ func TestAppViewNavBarTimerVisibility(t *testing.T) {
 
 	// 4. Stop timer
 	_, _ = timerSvc.Stop()
-	time.Sleep(600 * time.Millisecond)
+
+	// Refresh timer state on UI thread (simulating Draw)
+	appView.refreshTimerState()
 
 	if appView.tabTrackerBtn.text != "⏱️ Tracker" {
 		t.Errorf("Expected nav bar button to reset to '⏱️ Tracker', got '%s'", appView.tabTrackerBtn.text)
@@ -160,4 +163,3 @@ func TestAppViewPrivacyAndScreenShareShield(t *testing.T) {
 		t.Error("Expected overlay to close after clicking closeOverlayBtn")
 	}
 }
-

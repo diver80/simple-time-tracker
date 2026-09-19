@@ -30,6 +30,37 @@ func TestRoundDuration(t *testing.T) {
 	}
 }
 
+func TestFormatLargeDurations(t *testing.T) {
+	for _, tc := range []struct {
+		d            time.Duration
+		hhmm, hhmmss string
+	}{
+		{0, "00:00", "00:00:00"},
+		{100 * time.Hour, "100:00", "100:00:00"},
+		{123*time.Hour + 45*time.Minute + 6*time.Second, "123:45", "123:45:06"},
+		{999*time.Hour + 59*time.Minute + 59*time.Second, "1000:00", "999:59:59"},
+	} {
+		if got := FormatDurationHHMM(tc.d); got != tc.hhmm {
+			t.Errorf("HHMM(%v)=%s, want %s", tc.d, got, tc.hhmm)
+		}
+		if got := FormatDurationHHMMSS(tc.d); got != tc.hhmmss {
+			t.Errorf("HHMMSS(%v)=%s, want %s", tc.d, got, tc.hhmmss)
+		}
+	}
+}
+
+func TestRoundDurationOverflow(t *testing.T) {
+	const maxDuration = time.Duration(1<<63 - 1)
+	for _, mode := range []RoundMode{RoundCeil, RoundNearest} {
+		if got := RoundDuration(maxDuration, 2, mode); got != maxDuration {
+			t.Errorf("rounding overflow: %v", got)
+		}
+		if got := RoundDuration(time.Hour, int(maxDuration/time.Minute)+1, mode); got != time.Hour {
+			t.Errorf("unrepresentable interval changed duration: %v", got)
+		}
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	d := 1*time.Hour + 23*time.Minute + 45*time.Second
 	if got := FormatDurationHHMMSS(d); got != "01:23:45" {

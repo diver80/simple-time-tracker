@@ -16,15 +16,32 @@ import (
 type CalendarView struct {
 	widget.WidgetBase
 
-	repo            db.Repository
-	currentDay      time.Time
-	entries         []db.TimeEntry
-	selectedEntry   *db.TimeEntry
-	onRequestRedraw func()
+	repo                db.Repository
+	currentDay          time.Time
+	entries             []db.TimeEntry
+	selectedEntry       *db.TimeEntry
+	onRequestRedraw     func()
+	onEntriesChanged    func()  // Callback after successful mutations
 
 	prevBtn  *GlassButton
 	todayBtn *GlassButton
 	nextBtn  *GlassButton
+	addBtn   *GlassButton
+	listModeBtn *GlassButton
+
+	editor              *EntryEditor     // Active editor if any
+	isListMode          bool             // True for list view, false for timeline
+	listScrollOffset    int              // Scroll position in list mode
+
+	// Record clickable bounds for hit testing
+	timelineBlockBounds []struct {
+		entryID int64
+		bounds  geometry.Rect
+	}
+	listItemBounds []struct {
+		entryID int64
+		bounds  geometry.Rect
+	}
 }
 
 const (
@@ -37,6 +54,7 @@ func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
 		repo:            repo,
 		currentDay:      time.Now(),
 		onRequestRedraw: onRequestRedraw,
+		isListMode:      false,
 	}
 	cv.SetVisible(true)
 	cv.SetEnabled(true)
@@ -56,8 +74,57 @@ func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
 		cv.Refresh()
 	}).SetCompact(true)
 
+	cv.addBtn = NewGlassButton("+ Buchung", func() {
+		cv.openEditor(nil)
+	}).SetCompact(true)
+
+	cv.listModeBtn = NewGlassButton("📋", func() {
+		cv.isListMode = !cv.isListMode
+		cv.listScrollOffset = 0
+		if cv.onRequestRedraw != nil {
+			cv.onRequestRedraw()
+		}
+	}).SetCompact(true)
+
+	// Set parent for dirty redraw propagation
+	cv.prevBtn.SetParent(cv)
+	cv.todayBtn.SetParent(cv)
+	cv.nextBtn.SetParent(cv)
+	cv.addBtn.SetParent(cv)
+	cv.listModeBtn.SetParent(cv)
+
 	cv.Refresh()
 	return cv
+}
+
+// SetOnEntriesChanged sets the callback for entry mutations.
+func (cv *CalendarView) SetOnEntriesChanged(f func()) {
+	cv.onEntriesChanged = f
+}
+
+// openEditor opens the editor for a given entry (nil for new entry).
+// Centralizes editor setup and ensures proper callback handling.
+func (cv *CalendarView) openEditor(entry *db.TimeEntry) {
+	cv.editor = NewEntryEditor(cv.repo, entry, cv.currentDay, func() {
+		// After successful save/delete, update currentDay and refresh
+		if cv.editor != nil && cv.editor.currentDay != cv.currentDay {
+			cv.currentDay = cv.editor.currentDay
+		}
+		cv.Refresh()
+		if cv.onEntriesChanged != nil {
+			cv.onEntriesChanged()
+		}
+	}, func() {
+		// On cancel or close
+		cv.editor = nil
+		cv.Refresh()
+		if cv.onRequestRedraw != nil {
+			cv.onRequestRedraw()
+		}
+	}, cv.onRequestRedraw)
+	if cv.onRequestRedraw != nil {
+		cv.onRequestRedraw()
+	}
 }
 
 func (cv *CalendarView) Refresh() {
@@ -79,7 +146,7 @@ func (cv *CalendarView) Layout(ctx widget.Context, c geometry.Constraints) geome
 
 func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	b := cv.Bounds()
-	theme := DefaultDarkTheme
+	theme := &DefaultDarkTheme
 
 	// Background
 	canvas.DrawRoundRect(b, theme.CardBg, 12)
@@ -100,19 +167,78 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	dateStr := cv.currentDay.Format("02.01.2006")
 	canvas.DrawText(dateStr, geometry.NewRect(b.Min.X+144, navY+3, b.Width()-232, 18), 12, theme.TextPrimary, true, widget.TextAlignCenter)
 
-	// Timeline Canvas area
-	timelineTop := navY + 36
-	timelineBottom := b.Max.Y - 50
-	timelineHeight := timelineBottom - timelineTop
+	// If editor is open, show it instead of timeline
+	if cv.editor != nil {
+		cv.editor.SetBounds(geometry.NewRect(b.Min.X+10, b.Min.Y+50, b.Width()-20, b.Height()-70))
+		cv.editor.Draw(ctx, canvas)
+		return
+	}
+
+	// Check for active running entries
+	hasActiveEntry := false
+	for _, e := range cv.entries {
+		if e.EndedAt == nil {
+			hasActiveEntry = true
+			break
+		}
+	}
+
+	// Top action buttons
+	actionY := navY + 36
+	cv.addBtn.SetBounds(geometry.NewRect(b.Min.X+16, actionY, 80, 24))
+	cv.addBtn.Draw(ctx, canvas)
+
+	cv.listModeBtn.SetBounds(geometry.NewRect(b.Max.X-40, actionY, 24, 24))
+	cv.listModeBtn.Draw(ctx, canvas)
+
+	if hasActiveEntry {
+		warningText := "Bitte laufenden Timer zuerst stoppen"
+		canvas.DrawText(warningText, geometry.NewRect(b.Min.X+110, actionY+4, 200, 16), 9, widget.RGBA8(255, 100, 100, 255), true, widget.TextAlignLeft)
+	}
+
+	// Timeline or List View
+	contentTop := actionY + 36
+	contentBottom := b.Max.Y - 50
+
+	if cv.isListMode {
+		cv.drawListMode(ctx, canvas, b, contentTop, contentBottom, hasActiveEntry, theme)
+	} else {
+		cv.drawTimelineMode(ctx, canvas, b, contentTop, contentBottom, hasActiveEntry, theme)
+	}
+
+	// Day Footer Summary
+	var dayTotalSec int64
+	var billableSec int64
+	for _, e := range cv.entries {
+		dayTotalSec += e.DurationSec
+		if e.IsBillable {
+			billableSec += e.DurationSec
+		}
+	}
+	sepY := b.Max.Y - 36
+	canvas.DrawRect(geometry.NewRect(b.Min.X+16, sepY, b.Width()-32, 1), theme.LineSeparator)
+
+	summaryStr := fmt.Sprintf("Gesamt: %s  |  Abrechenbar: %s",
+		timer.FormatDurationHHMM(time.Duration(dayTotalSec)*time.Second),
+		timer.FormatDurationHHMM(time.Duration(billableSec)*time.Second),
+	)
+	canvas.DrawText(summaryStr, geometry.NewRect(b.Min.X+20, sepY+8, b.Width()-40, 18), 11, theme.TextSecondary, false, widget.TextAlignCenter)
+}
+
+func (cv *CalendarView) drawTimelineMode(ctx widget.Context, canvas widget.Canvas, b geometry.Rect, contentTop, contentBottom float32, hasActiveEntry bool, theme *AppTheme) {
+	timelineHeight := contentBottom - contentTop
 	timelineGutterX := b.Min.X + 54
 	timelineWidth := b.Max.X - timelineGutterX - 16
 
 	totalHours := float32(dayEndHour - dayStartHour)
 	hourHeight := timelineHeight / totalHours
 
+	// Clear bounds for hit testing
+	cv.timelineBlockBounds = nil
+
 	// Draw Hour Grid lines & labels
 	for h := dayStartHour; h <= dayEndHour; h++ {
-		curY := timelineTop + float32(h-dayStartHour)*hourHeight
+		curY := contentTop + float32(h-dayStartHour)*hourHeight
 		timeLbl := fmt.Sprintf("%02d:00", h)
 		canvas.DrawText(timeLbl, geometry.NewRect(b.Min.X+10, curY-6, 38, 14), 10, theme.TextMuted, false, widget.TextAlignRight)
 
@@ -123,6 +249,11 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	// Draw Task Time Blocks
 	for _, entry := range cv.entries {
+		// Skip active entries
+		if entry.EndedAt == nil {
+			continue
+		}
+
 		start := entry.StartedAt.Local()
 		startHour := float32(start.Hour()) + float32(start.Minute())/60.0
 		if startHour < float32(dayStartHour) {
@@ -138,16 +269,22 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 		}
 		durHours := durMin / 60.0
 
-		blockY := timelineTop + (startHour-float32(dayStartHour))*hourHeight
+		blockY := contentTop + (startHour-float32(dayStartHour))*hourHeight
 		blockH := durHours * hourHeight
-		if blockY+blockH > timelineBottom {
-			blockH = timelineBottom - blockY
+		if blockY+blockH > contentBottom {
+			blockH = contentBottom - blockY
 		}
 		if blockH < 20 {
 			blockH = 20
 		}
 
 		blockRect := geometry.NewRect(timelineGutterX+4, blockY, timelineWidth-8, blockH)
+
+		// Record bounds for hit testing
+		cv.timelineBlockBounds = append(cv.timelineBlockBounds, struct {
+			entryID int64
+			bounds  geometry.Rect
+		}{entry.ID, blockRect})
 
 		// Card colors based on project or QuickShift
 		blockBg := widget.RGBA8(35, 42, 58, 230)
@@ -188,7 +325,7 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	if cv.currentDay.Format("2006-01-02") == now.Format("2006-01-02") {
 		nowHour := float32(now.Hour()) + float32(now.Minute())/60.0
 		if nowHour >= float32(dayStartHour) && nowHour <= float32(dayEndHour) {
-			nowY := timelineTop + (nowHour-float32(dayStartHour))*hourHeight
+			nowY := contentTop + (nowHour-float32(dayStartHour))*hourHeight
 			nowLine := geometry.NewRect(timelineGutterX, nowY, timelineWidth, 1.5)
 			canvas.DrawRect(nowLine, widget.RGBA8(239, 68, 68, 255))
 
@@ -196,27 +333,75 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 			canvas.DrawCircle(geometry.Pt(timelineGutterX, nowY), 3.0, widget.RGBA8(239, 68, 68, 255))
 		}
 	}
+}
 
-	// Day Footer Summary
-	var dayTotalSec int64
-	var billableSec int64
-	for _, e := range cv.entries {
-		dayTotalSec += e.DurationSec
-		if e.IsBillable {
-			billableSec += e.DurationSec
+func (cv *CalendarView) drawListMode(ctx widget.Context, canvas widget.Canvas, b geometry.Rect, contentTop, contentBottom float32, hasActiveEntry bool, theme *AppTheme) {
+	y := contentTop
+	itemHeight := float32(32)
+
+	// Clear bounds for hit testing
+	cv.listItemBounds = nil
+
+	// Display sorted entries with scrolling
+	for i, entry := range cv.entries {
+		if i < cv.listScrollOffset {
+			continue
 		}
-	}
-	sepY := b.Max.Y - 36
-	canvas.DrawRect(geometry.NewRect(b.Min.X+16, sepY, b.Width()-32, 1), theme.LineSeparator)
+		if y >= contentBottom {
+			break
+		}
 
-	summaryStr := fmt.Sprintf("Gesamt: %s  |  Abrechenbar: %s",
-		timer.FormatDurationHHMM(time.Duration(dayTotalSec)*time.Second),
-		timer.FormatDurationHHMM(time.Duration(billableSec)*time.Second),
-	)
-	canvas.DrawText(summaryStr, geometry.NewRect(b.Min.X+20, sepY+8, b.Width()-40, 18), 11, theme.TextSecondary, false, widget.TextAlignCenter)
+		isActive := entry.EndedAt == nil
+		bgColor := theme.InputBg
+		if isActive {
+			bgColor = widget.RGBA8(60, 50, 50, 200)
+		}
+
+		itemRect := geometry.NewRect(b.Min.X+16, y, b.Width()-32, itemHeight-2)
+
+		// Record bounds for hit testing (only visible items, only complete entries)
+		if !isActive {
+			cv.listItemBounds = append(cv.listItemBounds, struct {
+				entryID int64
+				bounds  geometry.Rect
+			}{entry.ID, itemRect})
+		}
+
+		canvas.DrawRoundRect(itemRect, bgColor, 4)
+		canvas.StrokeRoundRect(itemRect, theme.InputBorder, 4, 1.0)
+
+		// Entry text
+		titleText := entry.TaskName
+		if entry.IsQuickShift {
+			titleText = "⚡ " + entry.TaskName
+		} else if entry.ProjectName != "" {
+			titleText = fmt.Sprintf("[%s] %s", entry.ProjectName, entry.TaskName)
+		}
+
+		timeStr := entry.StartedAt.Local().Format("15:04")
+		if entry.EndedAt != nil {
+			timeStr = fmt.Sprintf("%s-%s", entry.StartedAt.Local().Format("15:04"), entry.EndedAt.Local().Format("15:04"))
+		} else {
+			timeStr += " (Running...)"
+		}
+
+		canvas.DrawText(titleText, geometry.NewRect(itemRect.Min.X+8, itemRect.Min.Y+4, itemRect.Width()-16, 12), 10, theme.TextPrimary, true, widget.TextAlignLeft)
+		canvas.DrawText(timeStr, geometry.NewRect(itemRect.Min.X+8, itemRect.Min.Y+18, itemRect.Width()-16, 10), 9, theme.TextMuted, false, widget.TextAlignLeft)
+
+		y += itemHeight
+	}
 }
 
 func (cv *CalendarView) Event(ctx widget.Context, e event.Event) bool {
+	// Forward to editor if open
+	if cv.editor != nil {
+		if cv.editor.Event(ctx, e) {
+			return true
+		}
+		// Don't process underlying calendar buttons when editor exists
+		return false
+	}
+
 	if cv.prevBtn.Event(ctx, e) {
 		return true
 	}
@@ -226,9 +411,92 @@ func (cv *CalendarView) Event(ctx widget.Context, e event.Event) bool {
 	if cv.nextBtn.Event(ctx, e) {
 		return true
 	}
+	if cv.addBtn.Event(ctx, e) {
+		return true
+	}
+	if cv.listModeBtn.Event(ctx, e) {
+		return true
+	}
+
+	// Handle timeline mode clicks and interactions
+	if !cv.isListMode {
+		switch ev := e.(type) {
+		case *event.MouseEvent:
+			if ev.MouseType == event.MousePress {
+				// Hit-test in reverse order (most recently drawn first)
+				for i := len(cv.timelineBlockBounds) - 1; i >= 0; i-- {
+					bounds := cv.timelineBlockBounds[i]
+					if bounds.bounds.Contains(ev.Position) {
+						// Find the entry with this ID and open editor
+						for j := range cv.entries {
+							if cv.entries[j].ID == bounds.entryID {
+								cv.openEditor(&cv.entries[j])
+								return true
+							}
+						}
+					}
+				}
+			}
+		case *event.WheelEvent:
+			// Scroll handling would go here, but list mode has wheel handling below
+		}
+	}
+
+	// Handle list mode entry clicks and scrolling
+	if cv.isListMode {
+		switch ev := e.(type) {
+		case *event.MouseEvent:
+			if ev.MouseType == event.MousePress {
+				// Hit-test in reverse order (most recently drawn first)
+				for i := len(cv.listItemBounds) - 1; i >= 0; i-- {
+					bounds := cv.listItemBounds[i]
+					if bounds.bounds.Contains(ev.Position) {
+						// Find the entry with this ID and open editor
+						for j := range cv.entries {
+							if cv.entries[j].ID == bounds.entryID {
+								cv.openEditor(&cv.entries[j])
+								return true
+							}
+						}
+					}
+				}
+			}
+		case *event.WheelEvent:
+			// Adjust scroll offset based on wheel direction
+			// Positive delta = scroll up (decrease offset), negative = scroll down (increase offset)
+			if ev.Delta.Y > 0 {
+				cv.listScrollOffset--
+				if cv.listScrollOffset < 0 {
+					cv.listScrollOffset = 0
+				}
+			} else if ev.Delta.Y < 0 {
+				cv.listScrollOffset++
+				// Ensure we don't scroll past available entries
+				maxScroll := len(cv.entries) - 1
+				if cv.listScrollOffset > maxScroll {
+					cv.listScrollOffset = maxScroll
+				}
+			}
+			if cv.onRequestRedraw != nil {
+				cv.onRequestRedraw()
+			}
+			return true
+		}
+	}
+
 	return false
 }
 
 func (cv *CalendarView) Children() []widget.Widget {
-	return nil
+	children := []widget.Widget{
+		cv.prevBtn,
+		cv.todayBtn,
+		cv.nextBtn,
+		cv.addBtn,
+		cv.listModeBtn,
+	}
+	if cv.editor != nil {
+		children = append(children, cv.editor)
+	}
+	return children
 }

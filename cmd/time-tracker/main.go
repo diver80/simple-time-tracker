@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"time-tracker/pkg/db"
@@ -13,6 +14,7 @@ import (
 	"time-tracker/pkg/ui"
 	"time-tracker/pkg/window"
 
+	_ "github.com/gogpu/gg/gpu" // Register the renderer used by desktop.Run's GPU compositor.
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
 	"github.com/gogpu/ui/desktop"
@@ -76,11 +78,11 @@ func main() {
 	winMgr := window.NewWindowManager()
 
 	// 5. Initialize Gogpu engine
-	gogpuApp := gogpu.NewApp(gogpu.Config{
-		Title:  "Time Tracker",
-		Width:  420,
-		Height: 580,
-	})
+	gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
+		WithTitle("Time Tracker").
+		WithAppName("Time Tracker").
+		WithSize(420, 580).
+		WithResizable(false))
 
 	// 6. Transparent theme so macOS window has rounded corners with zero white artifact
 	transparentTheme := theme.DefaultDark()
@@ -96,48 +98,62 @@ func main() {
 		app.WithRenderMode(app.RenderModeFrameworkManaged),
 	)
 
-	// 8. Create Root App View
-	rootView := ui.NewAppView(
-		repo,
-		timerSvc,
-		winMgr,
-		func() {
-			gogpuApp.RequestRedraw()
-		},
-	)
+	// 8. Mount the UI and invalidate its retained scene, not just the OS window.
+	updates := &desktopUpdates{wake: gogpuApp.RequestRedraw}
+	rootView := ui.NewAppView(repo, timerSvc, winMgr, updates.requestRedraw)
+	uiApp.SetRoot(rootView)
 	rootView.SetOnResize(func(w, h int) {
 		uiApp.Window().HandleResize(w, h)
-		gogpuApp.RequestRedraw()
+		updates.requestRedraw()
 	})
 
-	// 9. Wire Menu Bar Status Item Callbacks
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		winMgr.InitStatusItem(window.StatusCallbacks{
-			OnToggleWindow: func() {
-				winMgr.TogglePopover(420, 580)
-				gogpuApp.RequestRedraw()
-			},
-			OnDayView: func() {
-				winMgr.ShowPopover(420, 640)
-				rootView.SwitchToCalendar()
-				gogpuApp.RequestRedraw()
-			},
-			OnExport: func() {
-				winMgr.ShowPopover(420, 580)
-				rootView.SwitchToExport()
-				gogpuApp.RequestRedraw()
-			},
-			OnQuickShift: func() {
-				winMgr.ShowPopover(420, 580)
-				rootView.TriggerQuickShift()
-				gogpuApp.RequestRedraw()
-			},
-			OnQuit: func() {
-				os.Exit(0)
-			},
+	// 9. Initialize native controls after the window actually exists. Native
+	// menu callbacks run on Cocoa's thread; widgets belong to the render thread.
+	statusInitialized := false
+	gogpuApp.OnUpdate(func(float64) {
+		if !statusInitialized {
+			statusInitialized = true
+			winMgr.InitStatusItem(window.StatusCallbacks{
+				OnToggleWindow: func() {
+					// Bounds() is synchronized by WidgetBase. Show the native
+					// window before relying on a render callback to run.
+					size := rootView.Bounds().Size()
+					if size.Width <= 0 || size.Height <= 0 {
+						winMgr.TogglePopover(420, 580)
+					} else {
+						winMgr.TogglePopover(int(size.Width), int(size.Height))
+					}
+					updates.requestRedraw()
+				},
+				OnDayView: func() {
+					winMgr.ShowPopover(420, 640)
+					updates.post(rootView.SwitchToCalendar)
+				},
+				OnExport: func() {
+					winMgr.ShowPopover(420, 580)
+					updates.post(rootView.SwitchToExport)
+				},
+				OnQuickShift: func() {
+					winMgr.ShowPopover(420, 580)
+					updates.post(rootView.TriggerQuickShift)
+				},
+				OnQuit: gogpuApp.Quit,
+			})
+			if primary := gogpuApp.PrimaryWindow(); runtime.GOOS == "darwin" && primary != nil {
+				primary.SetOnClose(func() bool {
+					winMgr.HidePopover()
+					return false // Keep the timer and status item alive.
+				})
+			}
+			fmt.Println("🚀 Time Tracker is ready. Click '⏱️ Time' to show/hide; right-click for actions.")
+		}
+	})
+	uiApp.SetFrameCallback(func(app.FrameStats) {
+		updates.flush(func() {
+			rootView.SetNeedsRedraw(true)
+			uiApp.Window().Context().Invalidate()
 		})
-	}()
+	})
 
 	// 10. Hook status title ticker to live duration
 	timerSvc.OnTick(func(elapsed time.Duration, state timer.TimerState, entry *db.TimeEntry) {
@@ -152,9 +168,6 @@ func main() {
 			winMgr.UpdateStatusTitle("⏱️ Time")
 		}
 	})
-
-	fmt.Println("🚀 Time Tracker is now active in your macOS Menu Bar!")
-	fmt.Println("👉 Click the '⏱️ Time' icon in the top right menu bar to open.")
 
 	// 11. Run desktop pipeline
 	if err := desktop.Run(gogpuApp, uiApp); err != nil {

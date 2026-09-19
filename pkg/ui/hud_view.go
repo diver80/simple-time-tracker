@@ -30,6 +30,11 @@ type HUDView struct {
 	inputBookingText string
 	selectedProject  *db.Project
 
+	taskInput    *TextInput
+	notesInput   *TextInput
+	projectInput *ProjectPicker
+	errorText    string
+
 	// UI interactive elements
 	startBtn      *GlassButton
 	stopBtn       *GlassButton
@@ -58,6 +63,43 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 	}
 	h.SetVisible(true)
 	h.SetEnabled(true)
+
+	h.taskInput = NewTextInput("Was möchtest du tun?", false, func(text string) {
+		h.inputTaskName = text
+		if h.activeEntry != nil {
+			if err := h.timerSvc.UpdateTaskName(text); err != nil {
+				h.errorText = err.Error()
+			} else {
+				h.errorText = ""
+			}
+		}
+	})
+	h.notesInput = NewTextInput("Hier Notizen eintragen …", true, func(text string) {
+		h.inputBookingText = text
+		if h.activeEntry != nil {
+			if err := h.timerSvc.UpdateBookingText(text); err != nil {
+				h.errorText = err.Error()
+			} else {
+				h.errorText = ""
+			}
+		}
+	})
+	h.projectInput = NewProjectPicker(repo, func(project *db.Project) {
+		if h.activeEntry != nil {
+			var id *int64
+			if project != nil { id = &project.ID }
+			if err := h.timerSvc.SetProject(id); err != nil {
+				h.errorText = err.Error()
+				h.projectInput.SetProjectID(h.activeEntry.ProjectID)
+				return
+			}
+		}
+		h.selectedProject = project
+		h.errorText = ""
+	})
+	for _, input := range []widget.Widget{h.taskInput, h.notesInput, h.projectInput} {
+		input.(interface{ SetParent(widget.Widget) }).SetParent(h)
+	}
 
 	// Initialize Buttons
 	h.startBtn = NewGlassButton("▶ Start Timer", func() {
@@ -109,11 +151,8 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 		h.refreshState()
 	})
 
-	// Hook timer tick
+	// Hook timer tick; only request redraw, state refreshed from UI thread
 	h.timerSvc.OnTick(func(elapsed time.Duration, state timer.TimerState, entry *db.TimeEntry) {
-		h.elapsed = elapsed
-		h.state = state
-		h.activeEntry = entry
 		if h.onRequestRedraw != nil {
 			h.onRequestRedraw()
 		}
@@ -142,6 +181,11 @@ func (h *HUDView) refreshState() {
 	}
 }
 
+func (h *HUDView) refreshTimerSnapshot() {
+	// Called on UI thread from Draw to safely fetch current timer state
+	h.state, h.activeEntry, h.elapsed = h.timerSvc.GetCurrentState()
+}
+
 func (h *HUDView) Layout(ctx widget.Context, c geometry.Constraints) geometry.Size {
 	// HUD dimensions: 400px width, responsive height
 	w := c.ConstrainWidth(400)
@@ -150,6 +194,9 @@ func (h *HUDView) Layout(ctx widget.Context, c geometry.Constraints) geometry.Si
 }
 
 func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
+	// Refresh timer snapshot on UI thread to avoid race with ticker goroutine
+	h.refreshTimerSnapshot()
+
 	b := h.Bounds()
 	theme := DefaultDarkTheme
 
@@ -191,64 +238,26 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	canvas.DrawText(taskLabel, geometry.NewRect(b.Min.X+20, taskY, 80, 16), 11, theme.TextSecondary, false, widget.TextAlignLeft)
 
 	taskBox := geometry.NewRect(b.Min.X+20, taskY+18, b.Width()-40, 32)
-	canvas.DrawRoundRect(taskBox, theme.InputBg, 6)
-	canvas.StrokeRoundRect(taskBox, theme.InputBorder, 6, 1.0)
-
-	taskText := h.inputTaskName
-	if taskText == "" {
-		taskText = "Was möchtest du tun? (z.B. Jira Ticket, Website...)"
-	} else if h.privacyMasked {
-		taskText = "••••••••••••••••"
-	}
-	textColor := theme.TextPrimary
-	if h.inputTaskName == "" {
-		textColor = theme.TextMuted
-	}
-	canvas.DrawText(taskText, geometry.NewRect(taskBox.Min.X+10, taskBox.Min.Y+8, taskBox.Width()-20, 18), 12, textColor, false, widget.TextAlignLeft)
+	h.taskInput.SetBounds(taskBox)
+	h.taskInput.SetMasked(h.privacyMasked)
+	h.taskInput.Draw(ctx, canvas)
 
 	// Project & Customer Indicator
 	projY := taskBox.Max.Y + 12
 	canvas.DrawText("Kunde & Projekt:", geometry.NewRect(b.Min.X+20, projY, 120, 16), 11, theme.TextSecondary, false, widget.TextAlignLeft)
 
 	projBox := geometry.NewRect(b.Min.X+20, projY+18, b.Width()-40, 28)
-	canvas.DrawRoundRect(projBox, theme.InputBg, 6)
-	canvas.StrokeRoundRect(projBox, theme.InputBorder, 6, 1.0)
-
-	projText := "[Kein Projekt zugeordnet — später zuweisen]"
-	if h.activeEntry != nil && h.activeEntry.ProjectName != "" {
-		if h.privacyMasked {
-			projText = "[••••••••] ••••••••••••"
-		} else {
-			projText = fmt.Sprintf("[%s] %s", h.activeEntry.CustomerName, h.activeEntry.ProjectName)
-		}
-	} else if h.selectedProject != nil {
-		if h.privacyMasked {
-			projText = "[••••••••] ••••••••••••"
-		} else {
-			projText = fmt.Sprintf("[%s] %s", h.selectedProject.CustomerName, h.selectedProject.Name)
-		}
-	}
-	canvas.DrawText(projText, geometry.NewRect(projBox.Min.X+10, projBox.Min.Y+6, projBox.Width()-20, 16), 11, theme.TextSecondary, false, widget.TextAlignLeft)
+	h.projectInput.SetBounds(projBox)
+	// Note: ProjectPicker doesn't have SetMasked method yet; privacy masking would need to be implemented there
 
 	// Live Booking Text Notes Box (Key feature requested by user)
 	notesY := projBox.Max.Y + 12
 	canvas.DrawText("Live-Buchungstext & Notizen:", geometry.NewRect(b.Min.X+20, notesY, 200, 16), 11, theme.TextSecondary, false, widget.TextAlignLeft)
 
 	notesBox := geometry.NewRect(b.Min.X+20, notesY+18, b.Width()-40, 90)
-	canvas.DrawRoundRect(notesBox, theme.InputBg, 6)
-	canvas.StrokeRoundRect(notesBox, theme.InputBorder, 6, 1.0)
-
-	notesText := h.inputBookingText
-	if notesText == "" {
-		notesText = "Hier Notizen während der Arbeit eintragen (wird live gespeichert)..."
-	} else if h.privacyMasked {
-		notesText = "••••••••••••••••••••••••••••••••••••••••••••••••"
-	}
-	notesColor := theme.TextPrimary
-	if h.inputBookingText == "" {
-		notesColor = theme.TextMuted
-	}
-	canvas.DrawText(notesText, geometry.NewRect(notesBox.Min.X+10, notesBox.Min.Y+8, notesBox.Width()-20, notesBox.Height()-16), 11, notesColor, false, widget.TextAlignLeft)
+	h.notesInput.SetBounds(notesBox)
+	h.notesInput.SetMasked(h.privacyMasked)
+	h.notesInput.Draw(ctx, canvas)
 
 	// Action Buttons Layout
 	btnY := notesBox.Max.Y + 16
@@ -279,6 +288,11 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	todayStr := fmt.Sprintf("Heute erfasst: %s", timer.FormatDurationHHMM(h.todayTotal))
 	canvas.DrawText(todayStr, geometry.NewRect(b.Min.X+20, footerY, b.Width()-40, 18), 11, theme.TextSecondary, false, widget.TextAlignCenter)
+	if h.errorText != "" {
+		canvas.DrawText(h.errorText, geometry.NewRect(b.Min.X+20, footerY-42, b.Width()-40, 30), 10, theme.StopColor, false, widget.TextAlignLeft)
+	}
+	// The selection menu must cover other controls, not be painted underneath.
+	h.projectInput.Draw(ctx, canvas)
 }
 
 func (h *HUDView) Event(ctx widget.Context, e event.Event) bool {

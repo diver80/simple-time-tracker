@@ -13,16 +13,16 @@ type Customer struct {
 
 // Project represents a project under a Customer.
 type Project struct {
-	ID          int64     `json:"id"`
-	CustomerID  int64     `json:"customer_id"`
-	CustomerName string   `json:"customer_name"`
-	Name        string    `json:"name"`
-	HourlyRate  float64   `json:"hourly_rate"`
-	BudgetHours float64   `json:"budget_hours"`
-	BudgetCost  float64   `json:"budget_cost"`
-	Color       string    `json:"color"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           int64     `json:"id"`
+	CustomerID   int64     `json:"customer_id"`
+	CustomerName string    `json:"customer_name"`
+	Name         string    `json:"name"`
+	HourlyRate   float64   `json:"hourly_rate"`
+	BudgetHours  float64   `json:"budget_hours"`
+	BudgetCost   float64   `json:"budget_cost"`
+	Color        string    `json:"color"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // TimeEntry represents a single tracked time block.
@@ -40,6 +40,9 @@ type TimeEntry struct {
 	IsBillable   bool       `json:"is_billable"`
 	IsQuickShift bool       `json:"is_quickshift"`
 	ParentID     *int64     `json:"parent_id,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	PausedAt     *time.Time `json:"paused_at,omitempty"`
+	// PausedNS excludes completed pauses; PausedAt marks an ongoing pause.
+	PausedNS  int64     `json:"paused_ns"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

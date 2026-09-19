@@ -2,6 +2,7 @@ package timer
 
 import (
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -21,6 +22,10 @@ func RoundDuration(d time.Duration, intervalMin int, mode RoundMode) time.Durati
 		return d
 	}
 
+	const maxDuration = time.Duration(1<<63 - 1)
+	if intervalMin > int(maxDuration/time.Minute) {
+		return d // The requested interval cannot be represented.
+	}
 	interval := time.Duration(intervalMin) * time.Minute
 	if d <= 0 {
 		return 0
@@ -28,12 +33,18 @@ func RoundDuration(d time.Duration, intervalMin int, mode RoundMode) time.Durati
 
 	switch mode {
 	case RoundCeil:
-		return ((d + interval - 1) / interval) * interval
+		if remainder := d % interval; remainder != 0 {
+			delta := interval - remainder
+			if d > maxDuration-delta {
+				return maxDuration
+			}
+			return d + delta
+		}
+		return d
 	case RoundFloor:
-		return (d / interval) * interval
+		return d.Truncate(interval)
 	case RoundNearest:
-		half := interval / 2
-		return ((d + half) / interval) * interval
+		return d.Round(interval)
 	default:
 		return d
 	}
@@ -62,8 +73,8 @@ func DecimalHours(d time.Duration) float64 {
 }
 
 func formatTwoDigits(n int) string {
-	if n < 10 {
-		return "0" + string(rune('0'+n))
+	if n >= 0 && n < 10 {
+		return "0" + strconv.Itoa(n)
 	}
-	return string(rune('0'+(n/10)%10)) + string(rune('0'+n%10))
+	return strconv.Itoa(n)
 }

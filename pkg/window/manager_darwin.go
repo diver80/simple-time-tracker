@@ -81,9 +81,10 @@ type DarwinWindowManager struct {
 
 func newPlatformWindowManager() WindowManager {
 	return &DarwinWindowManager{
-		visible: true,
-		width:   420,
-		height:  580,
+		visible:      true,
+		width:        420,
+		height:       580,
+		shieldActive: true,
 	}
 }
 
@@ -160,8 +161,10 @@ func (m *DarwinWindowManager) TempHide(duration time.Duration) {
 	m.HidePopover()
 	if duration > 0 {
 		time.AfterFunc(duration, func() {
-			m.ShowPopover(m.width, m.height)
+			m.mu.RLock()
+			width, height := m.width, m.height
+			m.mu.RUnlock()
+			m.ShowPopover(width, height)
 		})
 	}
 }
-
