@@ -121,6 +121,9 @@ func NewEntryEditor(repo db.Repository, entry *db.TimeEntry, currentDay time.Tim
 			ed.projectPicker.SetProjectID(entry.ProjectID)
 		}
 	} else {
+		if currentDay.IsZero() {
+			currentDay = time.Now()
+		}
 		// For new entries, set default times on selected day (9:00-10:00)
 		start := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), 9, 0, 0, 0, time.Local)
 		end := time.Date(currentDay.Year(), currentDay.Month(), currentDay.Day(), 10, 0, 0, 0, time.Local)
@@ -195,6 +198,10 @@ func (ed *EntryEditor) Draw(ctx widget.Context, canvas widget.Canvas) {
 	btnGap := float32(6)
 	totalBtnW := 3*btnW + 2*btnGap
 	btnStartX := b.Max.X - 16 - totalBtnW
+	minBtnStartX := b.Min.X + 16 + 60 + 8
+	if btnStartX < minBtnStartX {
+		btnStartX = minBtnStartX
+	}
 
 	ed.plus15Btn.SetBounds(geometry.NewRect(btnStartX, y, btnW, btnH))
 	ed.plus15Btn.Draw(ctx, canvas)
@@ -621,17 +628,24 @@ func (ed *EntryEditor) SetTimes(start, end time.Time) {
 }
 
 func (ed *EntryEditor) addDuration(d time.Duration) {
+	startStr := strings.TrimSpace(ed.startDTInput.Text())
 	endStr := strings.TrimSpace(ed.endDTInput.Text())
+
 	var endTime time.Time
 	var err error
-	if endStr != "" {
+
+	if startStr == "" && endStr == "" {
+		now := time.Now()
+		ed.startDTInput.SetText(now.Format("02.01.2006 15:04:05"))
+		endTime = now
+	} else if endStr != "" {
 		endTime, err = time.ParseInLocation("02.01.2006 15:04:05", endStr, time.Local)
 		if err != nil {
 			endTime, err = time.ParseInLocation("02.01.2006 15:04", endStr, time.Local)
 		}
 	}
-	if err != nil || endStr == "" {
-		startStr := strings.TrimSpace(ed.startDTInput.Text())
+
+	if (startStr != "" || endStr != "") && (err != nil || endStr == "") {
 		startTime, err2 := time.ParseInLocation("02.01.2006 15:04:05", startStr, time.Local)
 		if err2 != nil {
 			startTime, err2 = time.ParseInLocation("02.01.2006 15:04", startStr, time.Local)

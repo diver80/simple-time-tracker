@@ -59,6 +59,12 @@ func migrateLegacyDB(destPath string, legacyPaths []string) bool {
 			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err == nil {
 				if err := os.WriteFile(destPath, data, 0644); err == nil {
 					fmt.Printf("📦 Migrating existing database from %s to %s...\n", legacyPath, destPath)
+					for _, ext := range []string{"-wal", "-shm"} {
+						legacyExtra := legacyPath + ext
+						if extraData, err := os.ReadFile(legacyExtra); err == nil {
+							_ = os.WriteFile(destPath+ext, extraData, 0644)
+						}
+					}
 					return true
 				}
 			}

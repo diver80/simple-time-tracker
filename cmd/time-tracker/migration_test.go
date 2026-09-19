@@ -96,3 +96,35 @@ func TestDefaultDBPath_UsesSimpleTimeTracker(t *testing.T) {
 		t.Fatalf("expected resolveDefaultDBPath to point to simple-time-tracker/data.db, got: %s", path)
 	}
 }
+
+func TestMigrateLegacyDB_WithWALAndSHM(t *testing.T) {
+	tempDir := t.TempDir()
+	destPath := filepath.Join(tempDir, "simple-time-tracker", "data.db")
+	timeTrackerLegacy := filepath.Join(tempDir, "time-tracker", "data.db")
+
+	_ = os.MkdirAll(filepath.Dir(timeTrackerLegacy), 0755)
+	_ = os.WriteFile(timeTrackerLegacy, []byte("main-db-content"), 0644)
+	_ = os.WriteFile(timeTrackerLegacy+"-wal", []byte("wal-journal-content"), 0644)
+	_ = os.WriteFile(timeTrackerLegacy+"-shm", []byte("shm-index-content"), 0644)
+
+	migrated := migrateLegacyDB(destPath, []string{timeTrackerLegacy})
+	if !migrated {
+		t.Fatal("expected migrateLegacyDB to return true when migrating with WAL and SHM")
+	}
+
+	content, err := os.ReadFile(destPath)
+	if err != nil || string(content) != "main-db-content" {
+		t.Fatalf("unexpected main db content: %v, string: %s", err, string(content))
+	}
+
+	walContent, err := os.ReadFile(destPath + "-wal")
+	if err != nil || string(walContent) != "wal-journal-content" {
+		t.Fatalf("unexpected wal content: %v, string: %s", err, string(walContent))
+	}
+
+	shmContent, err := os.ReadFile(destPath + "-shm")
+	if err != nil || string(shmContent) != "shm-index-content" {
+		t.Fatalf("unexpected shm content: %v, string: %s", err, string(shmContent))
+	}
+}
+

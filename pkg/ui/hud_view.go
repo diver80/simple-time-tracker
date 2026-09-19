@@ -44,7 +44,6 @@ type HUDView struct {
 	finishQSBtn   *GlassButton
 
 	onRequestRedraw func()
-	isTypingNotes   bool
 	privacyMasked   bool
 }
 

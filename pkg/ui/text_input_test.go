@@ -497,10 +497,14 @@ func TestTextInputOutsideClickBlur(t *testing.T) {
 		Button:    event.ButtonLeft,
 	}
 	mockCtx := &testWidgetContext{}
+	mockCtx.RequestFocus(ti)
 	ti.Event(mockCtx, outsideEv)
 
 	if ti.IsFocused() {
 		t.Fatal("expected TextInput to lose focus when clicking outside bounds")
+	}
+	if mockCtx.IsFocused(ti) {
+		t.Fatal("expected context to release focus when clicking outside bounds")
 	}
 }
 

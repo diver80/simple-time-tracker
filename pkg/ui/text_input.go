@@ -260,11 +260,11 @@ func (t *TextInput) handleMouseEvent(ctx widget.Context, ev *event.MouseEvent) b
 			return true
 		} else {
 			if t.isFocused {
-				t.isFocused = false
-				t.WidgetBase.SetFocused(false)
-				t.selStart = -1
-				t.selEnd = -1
-				ctx.Invalidate()
+				t.SetFocused(false)
+				if ctx != nil {
+					ctx.ReleaseFocus(t)
+					ctx.Invalidate()
+				}
 			}
 		}
 

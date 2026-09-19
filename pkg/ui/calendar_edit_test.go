@@ -821,3 +821,71 @@ func TestEntryEditorTabFocusCycle(t *testing.T) {
 		t.Errorf("expected endDTInput to be focused on Shift+Tab, got task=%v, end=%v", editor.taskInput.IsFocused(), editor.endDTInput.IsFocused())
 	}
 }
+
+func TestEntryEditorAddDuration_BlankInputsFallback(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.Local)
+	editor := NewEntryEditor(repo, nil, day, nil, func() {}, func() {})
+
+	// Clear both inputs
+	editor.startDTInput.SetText("")
+	editor.endDTInput.SetText("")
+
+	// Click +15m
+	editor.plus15Btn.onClick()
+
+	startText := editor.startDTInput.Text()
+	endText := editor.endDTInput.Text()
+
+	if startText == "" {
+		t.Fatal("expected startDTInput to be initialized when both inputs were blank")
+	}
+	if endText == "" {
+		t.Fatal("expected endDTInput to be initialized when both inputs were blank")
+	}
+
+	startTime, err1 := time.ParseInLocation("02.01.2006 15:04:05", startText, time.Local)
+	endTime, err2 := time.ParseInLocation("02.01.2006 15:04:05", endText, time.Local)
+	if err1 != nil || err2 != nil {
+		t.Fatalf("failed to parse times: %v, %v", err1, err2)
+	}
+
+	diff := endTime.Sub(startTime)
+	if diff != 15*time.Minute {
+		t.Fatalf("expected duration 15m, got: %v", diff)
+	}
+}
+
+func TestEntryEditorDraw_NarrowWidthButtonPositioning(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.Local)
+	editor := NewEntryEditor(repo, nil, day, nil, func() {}, func() {})
+	// Extremely narrow width where standard calculation would overlap label
+	editor.SetBounds(geometry.NewRect(10, 10, 150, 400))
+
+	mockCtx := &testWidgetContext{}
+	editor.Draw(mockCtx, &testCanvas{})
+
+	// Label starts at 10 + 16 = 26, width 60 => ends at 86.
+	// minBtnStartX is b.Min.X + 16 + 60 + 8 = 94.
+	if editor.plus15Btn.Bounds().Min.X < 94 {
+		t.Fatalf("expected plus15Btn to be positioned at or beyond 94, got: %f", editor.plus15Btn.Bounds().Min.X)
+	}
+}
+
+func TestNewEntryEditor_ZeroCurrentDayFallback(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	var zeroTime time.Time
+	editor := NewEntryEditor(repo, nil, zeroTime, nil, func() {}, func() {})
+
+	if editor.startDTInput.Text() == "" || editor.endDTInput.Text() == "" {
+		t.Fatal("expected valid start and end times even when currentDay is zero")
+	}
+}
+
