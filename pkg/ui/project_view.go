@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 
-	"yokto-time/pkg/db"
+	"time-tracker/pkg/db"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"

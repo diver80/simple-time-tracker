@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/timer"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/timer"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
@@ -40,6 +40,14 @@ type HUDView struct {
 
 	onRequestRedraw func()
 	isTypingNotes   bool
+	privacyMasked   bool
+}
+
+func (h *HUDView) SetPrivacyMasked(masked bool) {
+	h.privacyMasked = masked
+	if h.onRequestRedraw != nil {
+		h.onRequestRedraw()
+	}
 }
 
 func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedraw func()) *HUDView {
@@ -189,6 +197,8 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	taskText := h.inputTaskName
 	if taskText == "" {
 		taskText = "Was möchtest du tun? (z.B. Jira Ticket, Website...)"
+	} else if h.privacyMasked {
+		taskText = "••••••••••••••••"
 	}
 	textColor := theme.TextPrimary
 	if h.inputTaskName == "" {
@@ -206,9 +216,17 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	projText := "[Kein Projekt zugeordnet — später zuweisen]"
 	if h.activeEntry != nil && h.activeEntry.ProjectName != "" {
-		projText = fmt.Sprintf("[%s] %s", h.activeEntry.CustomerName, h.activeEntry.ProjectName)
+		if h.privacyMasked {
+			projText = "[••••••••] ••••••••••••"
+		} else {
+			projText = fmt.Sprintf("[%s] %s", h.activeEntry.CustomerName, h.activeEntry.ProjectName)
+		}
 	} else if h.selectedProject != nil {
-		projText = fmt.Sprintf("[%s] %s", h.selectedProject.CustomerName, h.selectedProject.Name)
+		if h.privacyMasked {
+			projText = "[••••••••] ••••••••••••"
+		} else {
+			projText = fmt.Sprintf("[%s] %s", h.selectedProject.CustomerName, h.selectedProject.Name)
+		}
 	}
 	canvas.DrawText(projText, geometry.NewRect(projBox.Min.X+10, projBox.Min.Y+6, projBox.Width()-20, 16), 11, theme.TextSecondary, false, widget.TextAlignLeft)
 
@@ -223,6 +241,8 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	notesText := h.inputBookingText
 	if notesText == "" {
 		notesText = "Hier Notizen während der Arbeit eintragen (wird live gespeichert)..."
+	} else if h.privacyMasked {
+		notesText = "••••••••••••••••••••••••••••••••••••••••••••••••"
 	}
 	notesColor := theme.TextPrimary
 	if h.inputBookingText == "" {

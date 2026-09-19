@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/timer"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/timer"
 )
 
 type ExportOptions struct {

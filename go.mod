@@ -1,4 +1,4 @@
-module yokto-time
+module time-tracker
 
 go 1.27.0
 

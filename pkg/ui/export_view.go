@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/export"
-	"yokto-time/pkg/timer"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/export"
+	"time-tracker/pkg/timer"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
@@ -108,7 +108,7 @@ func (ev *ExportView) Refresh() {
 func (ev *ExportView) doExportCSV() {
 	home, _ := os.UserHomeDir()
 	desktop := filepath.Join(home, "Desktop")
-	targetFile := filepath.Join(desktop, fmt.Sprintf("yokto-export-%04d-%02d.csv", ev.selectedYear, int(ev.selectedMonth)))
+	targetFile := filepath.Join(desktop, fmt.Sprintf("time-export-%04d-%02d.csv", ev.selectedYear, int(ev.selectedMonth)))
 
 	opts := export.ExportOptions{
 		Year:        ev.selectedYear,

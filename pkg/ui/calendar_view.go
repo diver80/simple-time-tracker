@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/timer"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/timer"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"

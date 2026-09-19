@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/timer"
-	"yokto-time/pkg/ui"
-	"yokto-time/pkg/window"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/timer"
+	"time-tracker/pkg/ui"
+	"time-tracker/pkg/window"
 
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
@@ -33,13 +33,24 @@ func main() {
 	if dbPath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			dbPath = "yokto-time.db"
+			dbPath = "time-tracker.db"
 		} else {
-			dbPath = filepath.Join(home, "Library", "Application Support", "yokto-time", "data.db")
+			dir := filepath.Join(home, "Library", "Application Support", "time-tracker")
+			_ = os.MkdirAll(dir, 0755)
+			dbPath = filepath.Join(dir, "data.db")
+
+			// Auto-migrate legacy database from yokto-time if present
+			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+				legacyPath := filepath.Join(home, "Library", "Application Support", "yokto-time", "data.db")
+				if data, err := os.ReadFile(legacyPath); err == nil {
+					fmt.Printf("📦 Migrating existing database from %s to %s...\n", legacyPath, dbPath)
+					_ = os.WriteFile(dbPath, data, 0644)
+				}
+			}
 		}
 	}
 
-	fmt.Printf("⏱️ Starting Yokto Time Tracker v%s...\n", version)
+	fmt.Printf("⏱️ Starting Time Tracker v%s...\n", version)
 	fmt.Printf("📦 Database: %s\n", dbPath)
 
 	// 1. Initialize SQLite Database
@@ -66,7 +77,7 @@ func main() {
 
 	// 5. Initialize Gogpu engine
 	gogpuApp := gogpu.NewApp(gogpu.Config{
-		Title:  "Yokto Time Tracker",
+		Title:  "Time Tracker",
 		Width:  420,
 		Height: 580,
 	})
@@ -138,12 +149,12 @@ func main() {
 		case timer.StatePaused:
 			winMgr.UpdateStatusTitle(fmt.Sprintf("⏸️ %s", timer.FormatDurationHHMMSS(elapsed)))
 		default:
-			winMgr.UpdateStatusTitle("⏱️ Yokto")
+			winMgr.UpdateStatusTitle("⏱️ Time")
 		}
 	})
 
-	fmt.Println("🚀 Yokto Time is now active in your macOS Menu Bar!")
-	fmt.Println("👉 Click the '⏱️ Yokto' icon in the top right menu bar to open.")
+	fmt.Println("🚀 Time Tracker is now active in your macOS Menu Bar!")
+	fmt.Println("👉 Click the '⏱️ Time' icon in the top right menu bar to open.")
 
 	// 11. Run desktop pipeline
 	if err := desktop.Run(gogpuApp, uiApp); err != nil {

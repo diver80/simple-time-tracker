@@ -1,5 +1,7 @@
 package window
 
+import "time"
+
 type WindowManager interface {
 	InitStatusItem(callbacks StatusCallbacks)
 	UpdateStatusTitle(title string)
@@ -8,6 +10,9 @@ type WindowManager interface {
 	TogglePopover(width, height int)
 	IsVisible() bool
 	SetWindowSize(width, height int)
+	SetScreenShareShield(enable bool)
+	IsScreenShareShieldEnabled() bool
+	TempHide(duration time.Duration)
 }
 
 type StatusCallbacks struct {

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"yokto-time/pkg/db"
-	"yokto-time/pkg/timer"
+	"time-tracker/pkg/db"
+	"time-tracker/pkg/timer"
 )
 
 func TestGenerateMonthlyCSV(t *testing.T) {

@@ -2,6 +2,8 @@
 
 package window
 
+import "time"
+
 type FallbackWindowManager struct {
 	visible bool
 	width   int
@@ -23,3 +25,8 @@ func (m *FallbackWindowManager) HidePopover()                             { m.vi
 func (m *FallbackWindowManager) TogglePopover(width, height int)          { m.visible = !m.visible }
 func (m *FallbackWindowManager) IsVisible() bool                          { return m.visible }
 func (m *FallbackWindowManager) SetWindowSize(width, height int)          { m.width = width; m.height = height }
+func (m *FallbackWindowManager) SetScreenShareShield(enable bool)          {}
+func (m *FallbackWindowManager) IsScreenShareShieldEnabled() bool          { return false }
+func (m *FallbackWindowManager) TempHide(duration time.Duration)           { m.visible = false }
+
+

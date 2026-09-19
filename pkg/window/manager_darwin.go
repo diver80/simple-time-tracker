@@ -12,6 +12,7 @@ import "C"
 
 import (
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -71,10 +72,11 @@ func goOnQuit() {
 }
 
 type DarwinWindowManager struct {
-	visible bool
-	width   int
-	height  int
-	mu      sync.RWMutex
+	visible      bool
+	width        int
+	height       int
+	shieldActive bool
+	mu           sync.RWMutex
 }
 
 func newPlatformWindowManager() WindowManager {
@@ -136,3 +138,30 @@ func (m *DarwinWindowManager) SetWindowSize(width, height int) {
 	m.mu.Unlock()
 	C.DarwinPositionPopover(C.int(width), C.int(height))
 }
+
+func (m *DarwinWindowManager) SetScreenShareShield(enable bool) {
+	m.mu.Lock()
+	m.shieldActive = enable
+	m.mu.Unlock()
+	cEnable := C.int(0)
+	if enable {
+		cEnable = C.int(1)
+	}
+	C.DarwinSetWindowSharingNone(cEnable)
+}
+
+func (m *DarwinWindowManager) IsScreenShareShieldEnabled() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.shieldActive
+}
+
+func (m *DarwinWindowManager) TempHide(duration time.Duration) {
+	m.HidePopover()
+	if duration > 0 {
+		time.AfterFunc(duration, func() {
+			m.ShowPopover(m.width, m.height)
+		})
+	}
+}
+

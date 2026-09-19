@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"yokto-time/pkg/db"
+	"time-tracker/pkg/db"
 )
 
 func TestTimerServiceWorkflow(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"yokto-time/pkg/db"
+	"time-tracker/pkg/db"
 )
 
 type TimerState int

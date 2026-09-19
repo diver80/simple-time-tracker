@@ -28,6 +28,7 @@ void DarwinInitStatusItem(void) {
         if (win) {
             [win setLevel:NSNormalWindowLevel];
             [win center];
+            [win setSharingType:NSWindowSharingNone];
         }
     });
 }
@@ -79,3 +80,14 @@ void DarwinTogglePopover(int width, int height) {
         }
     });
 }
+
+void DarwinSetWindowSharingNone(int enable) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSWindow *win = GetGogpuWindow();
+        if (win) {
+            // NSWindowSharingNone = 0, NSWindowSharingReadOnly = 1
+            [win setSharingType:(enable ? NSWindowSharingNone : NSWindowSharingReadOnly)];
+        }
+    });
+}
+

@@ -10,6 +10,7 @@ void DarwinUpdateTitle(const char *title);
 void DarwinPositionPopover(int width, int height);
 void DarwinHidePopover(void);
 void DarwinTogglePopover(int width, int height);
+void DarwinSetWindowSharingNone(int enable);
 
 #ifdef __cplusplus
 }
