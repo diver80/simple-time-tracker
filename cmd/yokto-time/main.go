@@ -100,30 +100,33 @@ func main() {
 	})
 
 	// 9. Wire Menu Bar Status Item Callbacks
-	winMgr.InitStatusItem(window.StatusCallbacks{
-		OnToggleWindow: func() {
-			winMgr.TogglePopover(420, 580)
-			gogpuApp.RequestRedraw()
-		},
-		OnDayView: func() {
-			winMgr.ShowPopover(420, 640)
-			rootView.SwitchToCalendar()
-			gogpuApp.RequestRedraw()
-		},
-		OnExport: func() {
-			winMgr.ShowPopover(420, 580)
-			rootView.SwitchToExport()
-			gogpuApp.RequestRedraw()
-		},
-		OnQuickShift: func() {
-			winMgr.ShowPopover(420, 580)
-			rootView.TriggerQuickShift()
-			gogpuApp.RequestRedraw()
-		},
-		OnQuit: func() {
-			os.Exit(0)
-		},
-	})
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		winMgr.InitStatusItem(window.StatusCallbacks{
+			OnToggleWindow: func() {
+				winMgr.TogglePopover(420, 580)
+				gogpuApp.RequestRedraw()
+			},
+			OnDayView: func() {
+				winMgr.ShowPopover(420, 640)
+				rootView.SwitchToCalendar()
+				gogpuApp.RequestRedraw()
+			},
+			OnExport: func() {
+				winMgr.ShowPopover(420, 580)
+				rootView.SwitchToExport()
+				gogpuApp.RequestRedraw()
+			},
+			OnQuickShift: func() {
+				winMgr.ShowPopover(420, 580)
+				rootView.TriggerQuickShift()
+				gogpuApp.RequestRedraw()
+			},
+			OnQuit: func() {
+				os.Exit(0)
+			},
+		})
+	}()
 
 	// 10. Hook status title ticker to live duration
 	timerSvc.OnTick(func(elapsed time.Duration, state timer.TimerState, entry *db.TimeEntry) {
