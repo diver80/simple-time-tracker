@@ -48,7 +48,7 @@ static NSWindow *GetGogpuWindow(void) {
     if (g_appWindow) return g_appWindow;
     // Status item windows also belong to NSApp; never pick one as our HUD.
     for (NSWindow *window in [NSApp windows]) {
-        if ([[window title] isEqualToString:@"Time Tracker"]) {
+        if ([[window title] isEqualToString:@"Simple Time Tracker"]) {
             g_appWindow = window;
             break;
         }
@@ -73,20 +73,20 @@ void DarwinInitStatusItem(void) {
         if (g_statusItem) return;
 
         g_statusActions = [[TimeTrackerStatusActions alloc] init];
-        g_statusMenu = [[NSMenu alloc] initWithTitle:@"Time Tracker"];
+        g_statusMenu = [[NSMenu alloc] initWithTitle:@"Simple Time Tracker"];
         AddStatusAction(@"Show / Hide Tracker", @selector(toggleWindow:), @"");
         [g_statusMenu addItem:[NSMenuItem separatorItem]];
         AddStatusAction(@"Day View", @selector(dayView:), @"");
         AddStatusAction(@"Monthly Export", @selector(exportMonth:), @"");
         AddStatusAction(@"QuickShift", @selector(quickShift:), @"");
         [g_statusMenu addItem:[NSMenuItem separatorItem]];
-        AddStatusAction(@"Quit Time Tracker", @selector(quit:), @"q");
+        AddStatusAction(@"Quit Simple Time Tracker", @selector(quit:), @"q");
 
         g_statusItem = [[[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength] retain];
         NSStatusBarButton *button = [g_statusItem button];
         [button setTitle:g_statusTitle ?: @"⏱️ Time"];
         [button setFont:[NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular]];
-        [button setToolTip:@"Time Tracker — click to show/hide; right-click for actions"];
+        [button setToolTip:@"Simple Time Tracker — click to show/hide; right-click for actions"];
         [button setTarget:g_statusActions];
         [button setAction:@selector(statusClicked:)];
         [button sendActionOn:NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp];

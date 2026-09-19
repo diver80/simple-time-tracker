@@ -26,6 +26,47 @@ var (
 	version = "1.0.0"
 )
 
+func resolveDefaultDBPath(homeDir string) string {
+	if homeDir == "" {
+		return "simple-time-tracker.db"
+	}
+	dir := filepath.Join(homeDir, "Library", "Application Support", "simple-time-tracker")
+	_ = os.MkdirAll(dir, 0755)
+	dbPath := filepath.Join(dir, "data.db")
+
+	migrateLegacyDB(dbPath, []string{
+		filepath.Join(homeDir, "Library", "Application Support", "time-tracker", "data.db"),
+		filepath.Join(homeDir, "Library", "Application Support", "yokto-time", "data.db"),
+	})
+
+	return dbPath
+}
+
+func defaultDBPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "simple-time-tracker.db"
+	}
+	return resolveDefaultDBPath(home)
+}
+
+func migrateLegacyDB(destPath string, legacyPaths []string) bool {
+	if _, err := os.Stat(destPath); err == nil {
+		return false // Destination already exists
+	}
+	for _, legacyPath := range legacyPaths {
+		if data, err := os.ReadFile(legacyPath); err == nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err == nil {
+				if err := os.WriteFile(destPath, data, 0644); err == nil {
+					fmt.Printf("📦 Migrating existing database from %s to %s...\n", legacyPath, destPath)
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func main() {
 	dbFlag := flag.String("db", "", "Path to SQLite database file")
 	demoFlag := flag.Bool("demo", true, "Auto-seed demo clients and projects if database is empty")
@@ -33,26 +74,13 @@ func main() {
 
 	dbPath := *dbFlag
 	if dbPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			dbPath = "time-tracker.db"
-		} else {
-			dir := filepath.Join(home, "Library", "Application Support", "time-tracker")
-			_ = os.MkdirAll(dir, 0755)
-			dbPath = filepath.Join(dir, "data.db")
-
-			// Auto-migrate legacy database from yokto-time if present
-			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-				legacyPath := filepath.Join(home, "Library", "Application Support", "yokto-time", "data.db")
-				if data, err := os.ReadFile(legacyPath); err == nil {
-					fmt.Printf("📦 Migrating existing database from %s to %s...\n", legacyPath, dbPath)
-					_ = os.WriteFile(dbPath, data, 0644)
-				}
-			}
-		}
+		dbPath = defaultDBPath()
 	}
 
-	fmt.Printf("⏱️ Starting Time Tracker v%s...\n", version)
+	fmt.Printf("⏱️ Starting Simple Time Tracker (stt)...\n")
+	if version != "" {
+		fmt.Printf("ℹ️  Version: %s\n", version)
+	}
 	fmt.Printf("📦 Database: %s\n", dbPath)
 
 	// 1. Initialize SQLite Database
@@ -79,8 +107,8 @@ func main() {
 
 	// 5. Initialize Gogpu engine
 	gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
-		WithTitle("Time Tracker").
-		WithAppName("Time Tracker").
+		WithTitle("Simple Time Tracker").
+		WithAppName("Simple Time Tracker").
 		WithSize(420, 580).
 		WithResizable(false))
 
@@ -145,7 +173,7 @@ func main() {
 					return false // Keep the timer and status item alive.
 				})
 			}
-			fmt.Println("🚀 Time Tracker is ready. Click '⏱️ Time' to show/hide; right-click for actions.")
+			fmt.Println("🚀 Simple Time Tracker is ready. Click '⏱️ Time' to show/hide; right-click for actions.")
 		}
 	})
 	uiApp.SetFrameCallback(func(app.FrameStats) {
