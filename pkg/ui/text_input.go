@@ -90,6 +90,21 @@ func (t *TextInput) IsFocusable() bool {
 	return true
 }
 
+// SetFocused updates focus state and resets selection on blur.
+func (t *TextInput) SetFocused(focused bool) {
+	t.WidgetBase.SetFocused(focused)
+	t.isFocused = focused
+	if !focused {
+		t.selStart = -1
+		t.selEnd = -1
+	}
+}
+
+// IsFocused returns true if the input currently has focus.
+func (t *TextInput) IsFocused() bool {
+	return t.isFocused
+}
+
 // Layout determines the size of the text input.
 func (t *TextInput) Layout(ctx widget.Context, c geometry.Constraints) geometry.Size {
 	width := c.ConstrainWidth(200)
@@ -215,6 +230,7 @@ func (t *TextInput) handleMouseEvent(ctx widget.Context, ev *event.MouseEvent) b
 		if bounds.Contains(ev.Position) {
 			ctx.RequestFocus(t)
 			t.isFocused = true
+			t.WidgetBase.SetFocused(true)
 
 			// Calculate cursor position from click using approximate character widths
 			padding := float32(6)
@@ -242,6 +258,14 @@ func (t *TextInput) handleMouseEvent(ctx widget.Context, ev *event.MouseEvent) b
 			t.selEnd = -1
 			ctx.Invalidate()
 			return true
+		} else {
+			if t.isFocused {
+				t.isFocused = false
+				t.WidgetBase.SetFocused(false)
+				t.selStart = -1
+				t.selEnd = -1
+				ctx.Invalidate()
+			}
 		}
 
 	case event.MouseMove:
@@ -443,11 +467,13 @@ func (t *TextInput) handleKeyEvent(ctx widget.Context, ev *event.KeyEvent) bool 
 func (t *TextInput) handleFocusEvent(ev *event.FocusEvent) bool {
 	if ev.IsGained() {
 		t.isFocused = true
+		t.WidgetBase.SetFocused(true)
 		t.selStart = -1
 		t.selEnd = -1
 		return true
 	} else if ev.IsLost() {
 		t.isFocused = false
+		t.WidgetBase.SetFocused(false)
 		t.selStart = -1
 		t.selEnd = -1
 		return true

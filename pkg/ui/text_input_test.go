@@ -2,6 +2,11 @@ package ui
 
 import (
 	"testing"
+	"time"
+
+	"github.com/gogpu/ui/event"
+	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/widget"
 )
 
 // TestTextInputCreation tests basic widget creation and initialization
@@ -432,3 +437,70 @@ func TestTextInputStateConsistency(t *testing.T) {
 		t.Error("Text() doesn't match runes after insertion")
 	}
 }
+
+type testWidgetContext struct {
+	focused widget.Widget
+}
+
+var _ widget.Context = (*testWidgetContext)(nil)
+
+func (c *testWidgetContext) RequestFocus(w widget.Widget)       { c.focused = w }
+func (c *testWidgetContext) ReleaseFocus(w widget.Widget)       { if c.focused == w { c.focused = nil } }
+func (c *testWidgetContext) IsFocused(w widget.Widget) bool     { return c.focused == w }
+func (c *testWidgetContext) FocusedWidget() widget.Widget         { return c.focused }
+func (c *testWidgetContext) Now() time.Time                       { return time.Now() }
+func (c *testWidgetContext) DeltaTime() time.Duration             { return 0 }
+func (c *testWidgetContext) Invalidate()                          {}
+func (c *testWidgetContext) InvalidateRect(r geometry.Rect)       {}
+func (c *testWidgetContext) Cursor() widget.CursorType            { return widget.CursorDefault }
+func (c *testWidgetContext) SetCursor(cursor widget.CursorType)   {}
+func (c *testWidgetContext) Scale() float32                       { return 1.0 }
+func (c *testWidgetContext) ThemeProvider() widget.ThemeProvider   { return nil }
+func (c *testWidgetContext) OverlayManager() widget.OverlayManager { return nil }
+func (c *testWidgetContext) WindowSize() geometry.Size            { return geometry.Sz(800, 600) }
+func (c *testWidgetContext) Scheduler() widget.SchedulerRef       { return nil }
+
+func TestTextInputSetFocusedLifecycle(t *testing.T) {
+	ti := NewTextInput("placeholder", false, nil)
+	ti.SetBounds(geometry.NewRect(10, 10, 200, 30))
+
+	if ti.IsFocused() {
+		t.Fatal("expected newly created TextInput to not be focused")
+	}
+
+	ti.SetFocused(true)
+	if !ti.IsFocused() {
+		t.Fatal("expected TextInput to be focused after SetFocused(true)")
+	}
+
+	ti.selStart = 2
+	ti.selEnd = 5
+
+	ti.SetFocused(false)
+	if ti.IsFocused() {
+		t.Fatal("expected TextInput to blur after SetFocused(false)")
+	}
+	if ti.selStart != -1 || ti.selEnd != -1 {
+		t.Fatal("expected selection to be reset after blur")
+	}
+}
+
+func TestTextInputOutsideClickBlur(t *testing.T) {
+	ti := NewTextInput("placeholder", false, nil)
+	ti.SetBounds(geometry.NewRect(10, 10, 200, 30))
+	ti.SetFocused(true)
+
+	// Simulate mouse press outside bounds
+	outsideEv := &event.MouseEvent{
+		MouseType: event.MousePress,
+		Position:  geometry.Pt(300, 300),
+		Button:    event.ButtonLeft,
+	}
+	mockCtx := &testWidgetContext{}
+	ti.Event(mockCtx, outsideEv)
+
+	if ti.IsFocused() {
+		t.Fatal("expected TextInput to lose focus when clicking outside bounds")
+	}
+}
+
