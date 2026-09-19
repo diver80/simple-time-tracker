@@ -198,7 +198,7 @@ install_osx() {
     
     # If running, terminate previous instance
     pkill -x "${APP_NAME}" 2>/dev/null || true
-    pkill -f "${APP_NAME}" 2>/dev/null || true
+    pkill -f "${APP_DISPLAY_NAME}" 2>/dev/null || true
     
     rm -rf "${DEST_APP}"
     cp -R "${APP_BUNDLE}" "/Applications/"
@@ -286,8 +286,8 @@ release_homebrew() {
 
     # Update Homebrew Tap
     echo -e "   -> Updating Homebrew tap diver80/homebrew-tap..."
-    local tap_dir="/tmp/homebrew-tap-update"
-    rm -rf "${tap_dir}"
+    local tap_dir
+    tap_dir=$(mktemp -d -t homebrew-tap-XXXXXX)
     gh repo clone diver80/homebrew-tap "${tap_dir}" -- --depth=1
     
     mkdir -p "${tap_dir}/Casks"
@@ -305,6 +305,7 @@ cask "simple-time-tracker" do
   binary "#{appdir}/Simple Time Tracker.app/Contents/MacOS/stt"
 
   zap trash: [
+    "~/Library/Application Support/simple-time-tracker",
     "~/Library/Application Support/time-tracker",
     "~/Library/Preferences/com.avono.simple-time-tracker.plist",
   ]
@@ -322,7 +323,7 @@ EOF
         echo -e "   -> Homebrew tap Cask is already up to date."
     else
         git commit -m "feat: release Simple Time Tracker v${rel_version}"
-        git push origin main
+        git push origin HEAD
         echo -e "   -> Pushed updated Cask to diver80/homebrew-tap."
     fi
     cd - >/dev/null
