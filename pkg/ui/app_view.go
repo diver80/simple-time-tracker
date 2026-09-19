@@ -479,5 +479,22 @@ func (a *AppView) Event(ctx widget.Context, e event.Event) (handled bool) {
 }
 
 func (a *AppView) Children() []widget.Widget {
-	return nil
+	children := []widget.Widget{
+		a.tabTrackerBtn,
+		a.tabCalendarBtn,
+		a.tabExportBtn,
+		a.tabProjectsBtn,
+		a.tabShieldBtn,
+	}
+	switch a.activeTab {
+	case TabTracker:
+		children = append(children, a.hudView)
+	case TabCalendar:
+		children = append(children, a.calendarView)
+	case TabExport:
+		children = append(children, a.exportView)
+	case TabProjects:
+		children = append(children, a.projectView)
+	}
+	return children
 }

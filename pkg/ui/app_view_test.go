@@ -163,3 +163,47 @@ func TestAppViewPrivacyAndScreenShareShield(t *testing.T) {
 		t.Error("Expected overlay to close after clicking closeOverlayBtn")
 	}
 }
+
+func TestAppViewChildren(t *testing.T) {
+	repo, err := db.NewRepository(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create memory repo: %v", err)
+	}
+	defer repo.Close()
+
+	timerSvc := timer.NewTimerService(repo)
+	defer timerSvc.Close()
+
+	appView := NewAppView(repo, timerSvc, nil, func() {})
+
+	// Default tab: TabTracker
+	chTracker := appView.Children()
+	if len(chTracker) != 6 {
+		t.Fatalf("expected 6 children for TabTracker, got %d", len(chTracker))
+	}
+	if chTracker[5] != appView.hudView {
+		t.Errorf("expected last child to be hudView, got %v", chTracker[5])
+	}
+
+	// TabCalendar
+	appView.SwitchTab(TabCalendar)
+	chCalendar := appView.Children()
+	if len(chCalendar) != 6 || chCalendar[5] != appView.calendarView {
+		t.Errorf("expected calendarView child for TabCalendar, got %v", chCalendar)
+	}
+
+	// TabExport
+	appView.SwitchTab(TabExport)
+	chExport := appView.Children()
+	if len(chExport) != 6 || chExport[5] != appView.exportView {
+		t.Errorf("expected exportView child for TabExport, got %v", chExport)
+	}
+
+	// TabProjects
+	appView.SwitchTab(TabProjects)
+	chProjects := appView.Children()
+	if len(chProjects) != 6 || chProjects[5] != appView.projectView {
+		t.Errorf("expected projectView child for TabProjects, got %v", chProjects)
+	}
+}
+

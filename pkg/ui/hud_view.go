@@ -165,8 +165,15 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 func (h *HUDView) refreshState() {
 	h.state, h.activeEntry, h.elapsed = h.timerSvc.GetCurrentState()
 	if h.activeEntry != nil {
-		h.inputTaskName = h.activeEntry.TaskName
-		h.inputBookingText = h.activeEntry.BookingText
+		if !h.taskInput.IsFocused() {
+			h.inputTaskName = h.activeEntry.TaskName
+			h.taskInput.SetText(h.inputTaskName)
+		}
+		if !h.notesInput.IsFocused() {
+			h.inputBookingText = h.activeEntry.BookingText
+			h.notesInput.SetText(h.inputBookingText)
+		}
+		h.projectInput.SetProjectID(h.activeEntry.ProjectID)
 	}
 
 	// Calculate today's total
@@ -296,7 +303,12 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 }
 
 func (h *HUDView) Event(ctx widget.Context, e event.Event) bool {
-	// Delegate to buttons
+	// 1. Give project picker top priority if expanded or clicked
+	if h.projectInput.Event(ctx, e) {
+		return true
+	}
+
+	// 2. Delegate to action buttons
 	if h.state == timer.StateIdle {
 		if h.startBtn.Event(ctx, e) {
 			return true
@@ -317,37 +329,27 @@ func (h *HUDView) Event(ctx widget.Context, e event.Event) bool {
 		}
 	}
 
-	// Keyboard typing for live booking text & task name
-	switch ev := e.(type) {
-	case *event.KeyEvent:
-		if ev.KeyType == event.KeyPress {
-			if ev.Key == event.KeyBackspace {
-				if len(h.inputBookingText) > 0 {
-					h.inputBookingText = h.inputBookingText[:len(h.inputBookingText)-1]
-					if h.state == timer.StateRunning || h.state == timer.StateQuickShift {
-						_ = h.timerSvc.UpdateBookingText(h.inputBookingText)
-					}
-					if h.onRequestRedraw != nil {
-						h.onRequestRedraw()
-					}
-					return true
-				}
-			} else if ev.Rune >= 32 {
-				h.inputBookingText += string(ev.Rune)
-				if h.state == timer.StateRunning || h.state == timer.StateQuickShift {
-					_ = h.timerSvc.UpdateBookingText(h.inputBookingText)
-				}
-				if h.onRequestRedraw != nil {
-					h.onRequestRedraw()
-				}
-				return true
-			}
-		}
+	// 3. Delegate to Text Inputs
+	if h.taskInput.Event(ctx, e) {
+		return true
+	}
+	if h.notesInput.Event(ctx, e) {
+		return true
 	}
 
 	return false
 }
 
 func (h *HUDView) Children() []widget.Widget {
-	return nil
+	return []widget.Widget{
+		h.taskInput,
+		h.notesInput,
+		h.projectInput,
+		h.startBtn,
+		h.stopBtn,
+		h.quickShiftBtn,
+		h.finishQSBtn,
+		h.pauseBtn,
+		h.resumeBtn,
+	}
 }
