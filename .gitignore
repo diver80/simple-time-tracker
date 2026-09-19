@@ -1,0 +1,19 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Data & logs
+data/
+*.db
+*.db-journal
+*.log
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
