@@ -41,19 +41,22 @@ static TimeTrackerStatusActions *g_statusActions = nil;
 - (void)dayView:(id)sender { goOnDayView(); }
 - (void)exportMonth:(id)sender { goOnExport(); }
 - (void)quickShift:(id)sender { goOnQuickShift(); }
-- (void)quit:(id)sender { goOnQuit(); }
+- (void)quit:(id)sender {
+    goOnQuit();
+    [NSApp terminate:nil];
+}
 @end
 
 static NSWindow *GetGogpuWindow(void) {
     if (g_appWindow) return g_appWindow;
-    // Status item windows also belong to NSApp; never pick one as our HUD.
+    NSWindow *statusWin = g_statusItem ? [[g_statusItem button] window] : nil;
     for (NSWindow *window in [NSApp windows]) {
-        if ([[window title] isEqualToString:@"Simple Time Tracker"]) {
-            g_appWindow = window;
-            break;
-        }
+        if (window == statusWin) continue;
+        if ([window isKindOfClass:NSClassFromString(@"NSStatusBarWindow")]) continue;
+        g_appWindow = window;
+        return g_appWindow;
     }
-    return g_appWindow;
+    return nil;
 }
 
 static void AddStatusAction(NSString *title, SEL action, NSString *key) {
@@ -97,11 +100,20 @@ void DarwinUpdateTitle(const char *title) {
     if (!title) return;
     NSString *nsTitle = [NSString stringWithUTF8String:title];
     if (!nsTitle) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
+    void (^block)(void) = ^{
         [g_statusTitle release];
         g_statusTitle = [nsTitle copy];
-        [[g_statusItem button] setTitle:g_statusTitle];
-    });
+        NSStatusBarButton *btn = [g_statusItem button];
+        if (btn) {
+            [btn setTitle:g_statusTitle];
+            [btn setNeedsDisplay:YES];
+        }
+    };
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
 }
 
 // All helpers below run on the Cocoa main queue. Sizes are content dimensions,
@@ -131,30 +143,56 @@ static void PositionPopover(int width, int height) {
 }
 
 void DarwinPositionPopover(int width, int height) {
-    dispatch_async(dispatch_get_main_queue(), ^{
+    void (^block)(void) = ^{
         PositionPopover(width, height);
-    });
+    };
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
 }
 
 void DarwinHidePopover(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [GetGogpuWindow() orderOut:nil];
-    });
+    void (^block)(void) = ^{
+        NSWindow *win = GetGogpuWindow();
+        if (win) {
+            [win orderOut:nil];
+        }
+    };
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
 }
 
 void DarwinTogglePopover(int width, int height) {
-    dispatch_async(dispatch_get_main_queue(), ^{
+    void (^block)(void) = ^{
         NSWindow *win = GetGogpuWindow();
-        if ([win isVisible]) {
+        if (win && [win isVisible]) {
             [win orderOut:nil];
         } else {
             PositionPopover(width, height);
         }
-    });
+    };
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
 }
 
 void DarwinSetWindowSharingNone(int enable) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [GetGogpuWindow() setSharingType:(enable ? NSWindowSharingNone : NSWindowSharingReadOnly)];
-    });
+    void (^block)(void) = ^{
+        NSWindow *win = GetGogpuWindow();
+        if (win) {
+            [win setSharingType:(enable ? NSWindowSharingNone : NSWindowSharingReadOnly)];
+        }
+    };
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
 }

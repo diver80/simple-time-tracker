@@ -101,6 +101,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	// Screen Sharing Shield Button
 	a.tabShieldBtn = NewGlassButton("Schutz", func() {
 		a.showPrivacyOverlay = !a.showPrivacyOverlay
+		if a.showPrivacyOverlay && !a.telkoModeActive {
+			a.ToggleTelkoMode()
+		} else {
+			a.refreshStatusTitle()
+			a.updateTrackerTabLabel()
+		}
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
 		}
@@ -115,11 +121,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.hide15Btn = NewGlassButton("15m Call", func() {
 		a.showPrivacyOverlay = false
 		a.telkoModeActive = true
-		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetText("✓ Telko-Schutz: AKTIV (Timer verborgen)")
 		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
 			a.winMgr.UpdateStatusTitle("⏱️ Time")
+			a.winMgr.SetScreenShareShield(true)
 			a.winMgr.TempHide(15 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -130,11 +137,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.hide30Btn = NewGlassButton("30m Call", func() {
 		a.showPrivacyOverlay = false
 		a.telkoModeActive = true
-		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetText("✓ Telko-Schutz: AKTIV (Timer verborgen)")
 		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
 			a.winMgr.UpdateStatusTitle("⏱️ Time")
+			a.winMgr.SetScreenShareShield(true)
 			a.winMgr.TempHide(30 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -145,11 +153,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.hide60Btn = NewGlassButton("60m Call", func() {
 		a.showPrivacyOverlay = false
 		a.telkoModeActive = true
-		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetText("✓ Telko-Schutz: AKTIV (Timer verborgen)")
 		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
 			a.winMgr.UpdateStatusTitle("⏱️ Time")
+			a.winMgr.SetScreenShareShield(true)
 			a.winMgr.TempHide(60 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -160,11 +169,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.hideNowBtn = NewGlassButton("Bis Klick", func() {
 		a.showPrivacyOverlay = false
 		a.telkoModeActive = true
-		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetText("✓ Telko-Schutz: AKTIV (Timer verborgen)")
 		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
 			a.winMgr.UpdateStatusTitle("⏱️ Time")
+			a.winMgr.SetScreenShareShield(true)
 			a.winMgr.TempHide(0)
 		}
 		if a.onRequestRedraw != nil {
@@ -248,10 +258,11 @@ func (a *AppView) updateTrackerTabLabel() {
 func (a *AppView) ToggleTelkoMode() {
 	a.telkoModeActive = !a.telkoModeActive
 	if a.telkoModeActive {
-		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetText("✓ Telko-Schutz: AKTIV (Timer verborgen)")
 		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 		if a.winMgr != nil {
 			a.winMgr.UpdateStatusTitle("⏱️ Time")
+			a.winMgr.SetScreenShareShield(true)
 		}
 	} else {
 		a.telkoToggleBtn.SetText("Telko-Schutz aktivieren (Timer in Menüleiste verbergen)")
@@ -266,9 +277,9 @@ func (a *AppView) ToggleTelkoMode() {
 	}
 }
 
-// IsShieldActive reports whether conference call protection or data masking is active.
+// IsShieldActive reports whether conference call protection, overlay dialog, or data masking is active.
 func (a *AppView) IsShieldActive() bool {
-	return a.telkoModeActive || a.privacyMasked
+	return a.telkoModeActive || a.showPrivacyOverlay || a.privacyMasked
 }
 
 func (a *AppView) refreshStatusTitle() {
@@ -516,6 +527,24 @@ func (a *AppView) Event(ctx widget.Context, e event.Event) (handled bool) {
 			}
 		}
 	}()
+	// Handle Escape and Cmd+W to close overlay or window
+	switch ev := e.(type) {
+	case *event.KeyEvent:
+		if ev.KeyType == event.KeyPress {
+			isCmdW := ev.Key == event.KeyW && (ev.Modifiers().Has(event.ModSuper) || ev.Modifiers().Has(event.ModCtrl))
+			if ev.Key == event.KeyEscape || isCmdW {
+				if a.showPrivacyOverlay {
+					a.showPrivacyOverlay = false
+					return true
+				}
+				if a.winMgr != nil {
+					a.winMgr.HidePopover()
+					return true
+				}
+			}
+		}
+	}
+
 	// Screen Sharing Shield Button
 	if a.tabShieldBtn.Event(ctx, e) {
 		return true

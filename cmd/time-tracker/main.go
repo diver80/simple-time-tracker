@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	version = "1.0.4"
+	version = "1.0.5"
 )
 
 func resolveDefaultDBPath(homeDir string) string {
@@ -171,7 +171,10 @@ func main() {
 					winMgr.ShowPopover(420, 580)
 					updates.post(rootView.TriggerQuickShift)
 				},
-				OnQuit: gogpuApp.Quit,
+				OnQuit: func() {
+					gogpuApp.Quit()
+					os.Exit(0)
+				},
 			})
 			if primary := gogpuApp.PrimaryWindow(); runtime.GOOS == "darwin" && primary != nil {
 				primary.SetOnClose(func() bool {

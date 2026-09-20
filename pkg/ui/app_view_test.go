@@ -209,10 +209,16 @@ func TestAppViewPrivacyAndScreenShareShield(t *testing.T) {
 		t.Error("Expected privacyMasked to be false initially")
 	}
 
-	// 2. Click Shield button -> overlay opens
+	// 2. Click Shield button -> overlay opens and protection becomes active
 	appView.tabShieldBtn.onClick()
 	if !appView.showPrivacyOverlay {
 		t.Error("Expected privacy overlay to be open after clicking tabShieldBtn")
+	}
+	if !appView.IsShieldActive() {
+		t.Error("Expected IsShieldActive to be true when Schutz is open")
+	}
+	if winMgr.statusTitle != "⏱️ Time" {
+		t.Errorf("Expected status title '⏱️ Time', got %q", winMgr.statusTitle)
 	}
 
 	// 3. Test TempHide for 15m Call
