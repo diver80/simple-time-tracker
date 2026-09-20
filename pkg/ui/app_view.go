@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"time"
 
 	"time-tracker/pkg/db"
@@ -44,7 +45,9 @@ type AppView struct {
 	// Privacy & Screen Sharing State
 	showPrivacyOverlay bool
 	privacyMasked      bool
+	telkoModeActive    bool
 
+	telkoToggleBtn  *GlassButton
 	hide15Btn       *GlassButton
 	hide30Btn       *GlassButton
 	hide60Btn       *GlassButton
@@ -103,10 +106,20 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		}
 	}).SetCompact(true)
 
+	a.telkoToggleBtn = NewGlassButton("Telko-Schutz aktivieren (Timer in Menüleiste verbergen)", func() {
+		a.ToggleTelkoMode()
+	})
+	a.telkoToggleBtn.SetCustomColors(widget.RGBA8(240, 244, 250, 255), DefaultDarkTheme.TabInactive, DefaultDarkTheme.CardBorder)
+
 	// Temp Hide Snooze Buttons
 	a.hide15Btn = NewGlassButton("15m Call", func() {
 		a.showPrivacyOverlay = false
+		a.telkoModeActive = true
+		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
+		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
+			a.winMgr.UpdateStatusTitle("⏱️ Time")
 			a.winMgr.TempHide(15 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -116,7 +129,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 
 	a.hide30Btn = NewGlassButton("30m Call", func() {
 		a.showPrivacyOverlay = false
+		a.telkoModeActive = true
+		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
+		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
+			a.winMgr.UpdateStatusTitle("⏱️ Time")
 			a.winMgr.TempHide(30 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -126,7 +144,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 
 	a.hide60Btn = NewGlassButton("60m Call", func() {
 		a.showPrivacyOverlay = false
+		a.telkoModeActive = true
+		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
+		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
+			a.winMgr.UpdateStatusTitle("⏱️ Time")
 			a.winMgr.TempHide(60 * time.Minute)
 		}
 		if a.onRequestRedraw != nil {
@@ -136,7 +159,12 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 
 	a.hideNowBtn = NewGlassButton("Bis Klick", func() {
 		a.showPrivacyOverlay = false
+		a.telkoModeActive = true
+		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
+		a.updateTrackerTabLabel()
 		if a.winMgr != nil {
+			a.winMgr.UpdateStatusTitle("⏱️ Time")
 			a.winMgr.TempHide(0)
 		}
 		if a.onRequestRedraw != nil {
@@ -149,9 +177,16 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		a.hudView.SetPrivacyMasked(a.privacyMasked)
 		if a.privacyMasked {
 			a.maskToggleBtn.SetText("Maskierung aufheben (Sichtbar)")
+			if a.winMgr != nil {
+				a.winMgr.UpdateStatusTitle("⏱️ Time")
+			}
 		} else {
 			a.maskToggleBtn.SetText("Vertrauliche Daten maskieren")
+			if !a.telkoModeActive {
+				a.refreshStatusTitle()
+			}
 		}
+		a.updateTrackerTabLabel()
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
 		}
@@ -163,6 +198,14 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 			a.onRequestRedraw()
 		}
 	}).SetCompact(true)
+
+	a.telkoToggleBtn.SetParent(a)
+	a.hide15Btn.SetParent(a)
+	a.hide30Btn.SetParent(a)
+	a.hide60Btn.SetParent(a)
+	a.hideNowBtn.SetParent(a)
+	a.maskToggleBtn.SetParent(a)
+	a.closeOverlayBtn.SetParent(a)
 
 	// Hook timer tick to keep the top nav bar timer always visible across all tabs
 	// OnTick only requests redraw; actual state update happens in Draw via refreshTimerState
@@ -183,14 +226,68 @@ func (a *AppView) refreshTimerState() {
 	// Called on UI thread from Draw to safely fetch and cache timer state
 	a.timerState, a.activeEntry, a.timerElapsed = a.timerSvc.GetCurrentState()
 	a.updateTrackerTabLabel()
+	if a.IsShieldActive() && a.winMgr != nil {
+		a.winMgr.UpdateStatusTitle("⏱️ Time")
+	}
 }
 
 func (a *AppView) updateTrackerTabLabel() {
+	if a.IsShieldActive() {
+		a.tabTrackerBtn.SetText("Tracker")
+		return
+	}
 	switch a.timerState {
 	case timer.StateRunning, timer.StateQuickShift, timer.StatePaused:
 		a.tabTrackerBtn.SetText(timer.FormatDurationHHMMSS(a.timerElapsed))
 	default:
 		a.tabTrackerBtn.SetText("Tracker")
+	}
+}
+
+// ToggleTelkoMode toggles call protection, hiding the live timer from the menu bar and tab bar.
+func (a *AppView) ToggleTelkoMode() {
+	a.telkoModeActive = !a.telkoModeActive
+	if a.telkoModeActive {
+		a.telkoToggleBtn.SetText("Telko-Schutz: AKTIV (Timer verborgen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
+		if a.winMgr != nil {
+			a.winMgr.UpdateStatusTitle("⏱️ Time")
+		}
+	} else {
+		a.telkoToggleBtn.SetText("Telko-Schutz aktivieren (Timer in Menüleiste verbergen)")
+		a.telkoToggleBtn.SetCustomColors(widget.RGBA8(240, 244, 250, 255), DefaultDarkTheme.TabInactive, DefaultDarkTheme.CardBorder)
+		if !a.privacyMasked {
+			a.refreshStatusTitle()
+		}
+	}
+	a.updateTrackerTabLabel()
+	if a.onRequestRedraw != nil {
+		a.onRequestRedraw()
+	}
+}
+
+// IsShieldActive reports whether conference call protection or data masking is active.
+func (a *AppView) IsShieldActive() bool {
+	return a.telkoModeActive || a.privacyMasked
+}
+
+func (a *AppView) refreshStatusTitle() {
+	if a.winMgr == nil {
+		return
+	}
+	if a.IsShieldActive() {
+		a.winMgr.UpdateStatusTitle("⏱️ Time")
+		return
+	}
+	switch a.timerState {
+	case timer.StateRunning:
+		a.winMgr.UpdateStatusTitle(fmt.Sprintf("⏱️ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
+	case timer.StateQuickShift:
+		a.winMgr.UpdateStatusTitle(fmt.Sprintf("⚡ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
+	case timer.StatePaused:
+		a.winMgr.UpdateStatusTitle(fmt.Sprintf("⏸️ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
+	default:
+		a.winMgr.UpdateStatusTitle("⏱️ Time")
 	}
 }
 
@@ -312,8 +409,8 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	a.tabShieldBtn.SetBounds(geometry.NewRect(b.Min.X+350, tabY, 54, 26))
 	if a.showPrivacyOverlay {
 		a.tabShieldBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
-	} else if a.privacyMasked {
-		a.tabShieldBtn.SetCustomColors(theme.QuickShiftColor, widget.RGBA8(44, 34, 18, 255), theme.QuickShiftColor)
+	} else if a.IsShieldActive() {
+		a.tabShieldBtn.SetCustomColors(theme.AccentPrimary, widget.RGBA8(16, 185, 129, 45), theme.AccentPrimary)
 	} else {
 		a.tabShieldBtn.SetCustomColors(theme.AccentPrimary, theme.TabInactive, theme.LineSeparator)
 	}
@@ -322,69 +419,78 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	// Content Subview Area
 	contentRect := geometry.NewRect(b.Min.X+10, tabY+34, b.Width()-20, b.Height()-46)
 
-	switch a.activeTab {
-	case TabTracker:
-		a.hudView.SetBounds(contentRect)
-		a.hudView.Draw(ctx, canvas)
-	case TabCalendar:
-		a.calendarView.SetBounds(contentRect)
-		a.calendarView.Draw(ctx, canvas)
-	case TabExport:
-		a.exportView.SetBounds(contentRect)
-		a.exportView.Draw(ctx, canvas)
-	case TabProjects:
-		a.projectView.SetBounds(contentRect)
-		a.projectView.Draw(ctx, canvas)
-	}
+	if !a.showPrivacyOverlay {
+		switch a.activeTab {
+		case TabTracker:
+			a.hudView.SetBounds(contentRect)
+			a.hudView.Draw(ctx, canvas)
+		case TabCalendar:
+			a.calendarView.SetBounds(contentRect)
+			a.calendarView.Draw(ctx, canvas)
+		case TabExport:
+			a.exportView.SetBounds(contentRect)
+			a.exportView.Draw(ctx, canvas)
+		case TabProjects:
+			a.projectView.SetBounds(contentRect)
+			a.projectView.Draw(ctx, canvas)
+		}
+	} else {
+		// Dimmed backdrop behind overlay
+		canvas.DrawRoundRect(contentRect, widget.RGBA8(10, 14, 22, 235), 12)
 
-	// Draw Privacy & Screen Sharing Shield Overlay
-	if a.showPrivacyOverlay {
-		overlayRect := geometry.NewRect(contentRect.Min.X+10, contentRect.Min.Y+10, contentRect.Width()-20, 380)
-		canvas.DrawRoundRect(overlayRect, widget.RGBA8(18, 22, 32, 250), 12)
+		overlayRect := geometry.NewRect(contentRect.Min.X+10, contentRect.Min.Y+10, contentRect.Width()-20, 370)
+		canvas.DrawRoundRect(overlayRect, widget.RGBA8(22, 26, 36, 255), 12)
 		canvas.StrokeRoundRect(overlayRect, theme.AccentPrimary, 12, 1.5)
 
 		// Header
 		canvas.DrawText("Screen Sharing & Call Schutz",
-			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+20, overlayRect.Width()-32, 22),
+			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+16, overlayRect.Width()-32, 22),
 			15, widget.RGBA8(255, 255, 255, 255), true, widget.TextAlignCenter)
 
 		// Status Badge
 		canvas.DrawText("macOS Screen-Capture Shield ist AKTIV",
-			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+48, overlayRect.Width()-32, 18),
+			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+42, overlayRect.Width()-32, 18),
 			12, theme.AccentPrimary, true, widget.TextAlignCenter)
 
 		canvas.DrawText("Dieses Fenster wird von Teams & Zoom bei Bildschirmübertragung\nautomatisch ausgeblendet (NSWindowSharingNone).",
-			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+70, overlayRect.Width()-32, 32),
+			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+62, overlayRect.Width()-32, 28),
 			10, theme.TextSecondary, false, widget.TextAlignCenter)
 
-		// Temp Hide Section
-		sepY := overlayRect.Min.Y + 112
-		canvas.DrawRect(geometry.NewRect(overlayRect.Min.X+16, sepY, overlayRect.Width()-32, 1), theme.LineSeparator)
+		// Section 1: Telko-Modus (Menüleiste)
+		sepY1 := overlayRect.Min.Y + 96
+		canvas.DrawRect(geometry.NewRect(overlayRect.Min.X+16, sepY1, overlayRect.Width()-32, 1), theme.LineSeparator)
+
+		a.telkoToggleBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, sepY1+10, overlayRect.Width()-32, 30))
+		a.telkoToggleBtn.Draw(ctx, canvas)
+
+		// Section 2: Temp Hide Snooze
+		sepY2 := sepY1 + 48
+		canvas.DrawRect(geometry.NewRect(overlayRect.Min.X+16, sepY2, overlayRect.Width()-32, 1), theme.LineSeparator)
 
 		canvas.DrawText("Fenster temporär ausblenden für laufenden Call:",
-			geometry.NewRect(overlayRect.Min.X+16, sepY+10, overlayRect.Width()-32, 18),
+			geometry.NewRect(overlayRect.Min.X+16, sepY2+8, overlayRect.Width()-32, 16),
 			11, theme.TextPrimary, true, widget.TextAlignLeft)
 
 		btnW := (overlayRect.Width() - 42) / 2
-		btnY1 := sepY + 34
-		a.hide15Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, btnY1, btnW, 30))
+		btnY1 := sepY2 + 28
+		a.hide15Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, btnY1, btnW, 28))
 		a.hide15Btn.Draw(ctx, canvas)
 
-		a.hide30Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+26+btnW, btnY1, btnW, 30))
+		a.hide30Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+26+btnW, btnY1, btnW, 28))
 		a.hide30Btn.Draw(ctx, canvas)
 
-		btnY2 := btnY1 + 38
-		a.hide60Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, btnY2, btnW, 30))
+		btnY2 := btnY1 + 34
+		a.hide60Btn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, btnY2, btnW, 28))
 		a.hide60Btn.Draw(ctx, canvas)
 
-		a.hideNowBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+26+btnW, btnY2, btnW, 30))
+		a.hideNowBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+26+btnW, btnY2, btnW, 28))
 		a.hideNowBtn.Draw(ctx, canvas)
 
-		// Data Masking Section
-		sepY2 := btnY2 + 48
-		canvas.DrawRect(geometry.NewRect(overlayRect.Min.X+16, sepY2, overlayRect.Width()-32, 1), theme.LineSeparator)
+		// Section 3: Data Masking
+		sepY3 := btnY2 + 42
+		canvas.DrawRect(geometry.NewRect(overlayRect.Min.X+16, sepY3, overlayRect.Width()-32, 1), theme.LineSeparator)
 
-		a.maskToggleBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, sepY2+12, overlayRect.Width()-32, 32))
+		a.maskToggleBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, sepY3+10, overlayRect.Width()-32, 30))
 		if a.privacyMasked {
 			a.maskToggleBtn.SetCustomColors(widget.RGBA8(0, 0, 0, 255), theme.QuickShiftColor, widget.RGBA8(217, 119, 6, 255))
 		} else {
@@ -393,7 +499,7 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 		a.maskToggleBtn.Draw(ctx, canvas)
 
 		// Close button
-		a.closeOverlayBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, sepY2+52, overlayRect.Width()-32, 28))
+		a.closeOverlayBtn.SetBounds(geometry.NewRect(overlayRect.Min.X+16, sepY3+48, overlayRect.Width()-32, 26))
 		a.closeOverlayBtn.SetCustomColors(theme.TextSecondary, theme.InputBg, theme.CardBorder)
 		a.closeOverlayBtn.Draw(ctx, canvas)
 	}
@@ -417,6 +523,9 @@ func (a *AppView) Event(ctx widget.Context, e event.Event) (handled bool) {
 
 	// Handle overlay interactions if open
 	if a.showPrivacyOverlay {
+		if a.telkoToggleBtn.Event(ctx, e) {
+			return true
+		}
 		if a.hide15Btn.Event(ctx, e) {
 			return true
 		}
@@ -480,6 +589,18 @@ func (a *AppView) Children() []widget.Widget {
 		a.tabExportBtn,
 		a.tabProjectsBtn,
 		a.tabShieldBtn,
+	}
+	if a.showPrivacyOverlay {
+		children = append(children,
+			a.telkoToggleBtn,
+			a.hide15Btn,
+			a.hide30Btn,
+			a.hide60Btn,
+			a.hideNowBtn,
+			a.maskToggleBtn,
+			a.closeOverlayBtn,
+		)
+		return children
 	}
 	switch a.activeTab {
 	case TabTracker:

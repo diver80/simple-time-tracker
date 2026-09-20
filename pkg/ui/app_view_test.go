@@ -15,10 +15,11 @@ import (
 type dummyWinMgr struct {
 	hiddenDuration time.Duration
 	shieldEnabled  bool
+	statusTitle    string
 }
 
 func (d *dummyWinMgr) InitStatusItem(cb window.StatusCallbacks) {}
-func (d *dummyWinMgr) UpdateStatusTitle(title string)           {}
+func (d *dummyWinMgr) UpdateStatusTitle(title string)           { d.statusTitle = title }
 func (d *dummyWinMgr) SetWindowSize(w, h int)                   {}
 func (d *dummyWinMgr) TogglePopover(w, h int)                   {}
 func (d *dummyWinMgr) ShowPopover(w, h int)                     {}
@@ -293,6 +294,77 @@ func TestAppViewChildren(t *testing.T) {
 	chProjects := appView.Children()
 	if len(chProjects) != 6 || chProjects[5] != appView.projectView {
 		t.Errorf("expected projectView child for TabProjects, got %v", chProjects)
+	}
+
+	// Test overlay children
+	appView.tabShieldBtn.onClick()
+	chOverlay := appView.Children()
+	if len(chOverlay) != 12 {
+		t.Fatalf("expected 12 children when showPrivacyOverlay is true (5 tabs + 7 overlay buttons), got %d", len(chOverlay))
+	}
+	if chOverlay[5] != appView.telkoToggleBtn {
+		t.Errorf("expected chOverlay[5] to be telkoToggleBtn, got %v", chOverlay[5])
+	}
+	if chOverlay[11] != appView.closeOverlayBtn {
+		t.Errorf("expected chOverlay[11] to be closeOverlayBtn, got %v", chOverlay[11])
+	}
+}
+
+func TestAppViewTelkoMode(t *testing.T) {
+	repo, err := db.NewRepository(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create memory repo: %v", err)
+	}
+	defer repo.Close()
+
+	timerSvc := timer.NewTimerService(repo)
+	defer timerSvc.Close()
+
+	winMgr := &dummyWinMgr{}
+	appView := NewAppView(repo, timerSvc, winMgr, func() {})
+
+	// 1. Initially shield and telko mode should be inactive
+	if appView.IsShieldActive() {
+		t.Error("Expected IsShieldActive to be false initially")
+	}
+
+	// 2. Start timer
+	_, err = timerSvc.Start(nil, "Telko Test", true)
+	if err != nil {
+		t.Fatalf("Failed to start timer: %v", err)
+	}
+	appView.refreshTimerState()
+
+	// Tracker tab button should show duration
+	if !strings.HasPrefix(appView.tabTrackerBtn.text, "00:") {
+		t.Errorf("Expected tabTrackerBtn to show elapsed time, got %q", appView.tabTrackerBtn.text)
+	}
+
+	// 3. Toggle TelkoMode ON
+	appView.ToggleTelkoMode()
+	if !appView.IsShieldActive() {
+		t.Error("Expected IsShieldActive to be true after ToggleTelkoMode")
+	}
+	if appView.tabTrackerBtn.text != "Tracker" {
+		t.Errorf("Expected tabTrackerBtn to display 'Tracker' while TelkoMode is active, got %q", appView.tabTrackerBtn.text)
+	}
+	if winMgr.statusTitle != "⏱️ Time" {
+		t.Errorf("Expected status title '⏱️ Time', got %q", winMgr.statusTitle)
+	}
+
+	// Calling refreshTimerState while shield is active must keep "Tracker"
+	appView.refreshTimerState()
+	if appView.tabTrackerBtn.text != "Tracker" {
+		t.Errorf("Expected tabTrackerBtn to remain 'Tracker', got %q", appView.tabTrackerBtn.text)
+	}
+
+	// 4. Toggle TelkoMode OFF
+	appView.ToggleTelkoMode()
+	if appView.IsShieldActive() {
+		t.Error("Expected IsShieldActive to be false after toggling off")
+	}
+	if !strings.HasPrefix(appView.tabTrackerBtn.text, "00:") {
+		t.Errorf("Expected tabTrackerBtn to resume showing duration, got %q", appView.tabTrackerBtn.text)
 	}
 }
 

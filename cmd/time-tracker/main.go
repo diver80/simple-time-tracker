@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	version = "1.0.3"
+	version = "1.0.4"
 )
 
 func resolveDefaultDBPath(homeDir string) string {
@@ -191,6 +191,10 @@ func main() {
 
 	// 10. Hook status title ticker to live duration
 	timerSvc.OnTick(func(elapsed time.Duration, state timer.TimerState, entry *db.TimeEntry) {
+		if rootView.IsShieldActive() {
+			winMgr.UpdateStatusTitle("⏱️ Time")
+			return
+		}
 		switch state {
 		case timer.StateRunning:
 			winMgr.UpdateStatusTitle(fmt.Sprintf("⏱️ %s", timer.FormatDurationHHMMSS(elapsed)))
