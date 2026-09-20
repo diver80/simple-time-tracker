@@ -88,9 +88,9 @@ func (pp *ProjectPicker) Draw(ctx widget.Context, canvas widget.Canvas) {
 	canvas.DrawText(displayText, geometry.NewRect(b.Min.X+6, b.Min.Y+4, b.Width()-20, 20), 11, theme.TextPrimary, false, widget.TextAlignLeft)
 
 	// Dropdown arrow
-	arrowText := "▼"
+	arrowText := "v"
 	if pp.isExpanded {
-		arrowText = "▲"
+		arrowText = "^"
 	}
 	canvas.DrawText(arrowText, geometry.NewRect(b.Max.X-18, b.Min.Y+4, 12, 20), 11, theme.TextPrimary, false, widget.TextAlignCenter)
 

@@ -200,13 +200,15 @@ func (pv *ProjectView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	pv.deleteBtnBounds = make(map[int64]geometry.Rect)
 
 	if len(pv.projects) == 0 {
-		emptyY := topY + 70
-		canvas.DrawText("Noch keine Projekte vorhanden.", geometry.NewRect(b.Min.X+20, emptyY, b.Width()-40, 20), 12, theme.TextMuted, false, widget.TextAlignCenter)
-		canvas.DrawText("Klicke oben auf '+ Projekt', um ein Projekt anzulegen,\noder lade Testdaten:", geometry.NewRect(b.Min.X+20, emptyY+24, b.Width()-40, 32), 11, theme.TextSecondary, false, widget.TextAlignCenter)
+		if pv.projectEditor == nil {
+			emptyY := topY + 70
+			canvas.DrawText("Noch keine Projekte vorhanden.", geometry.NewRect(b.Min.X+20, emptyY, b.Width()-40, 20), 12, theme.TextMuted, false, widget.TextAlignCenter)
+			canvas.DrawText("Klicke oben auf '+ Projekt', um ein Projekt anzulegen,\noder lade Testdaten:", geometry.NewRect(b.Min.X+20, emptyY+24, b.Width()-40, 32), 11, theme.TextSecondary, false, widget.TextAlignCenter)
 
-		sampleBtnW := float32(230)
-		pv.addSampleBtn.SetBounds(geometry.NewRect(b.Min.X+(b.Width()-sampleBtnW)/2, emptyY+68, sampleBtnW, 26))
-		pv.addSampleBtn.Draw(ctx, canvas)
+			sampleBtnW := float32(230)
+			pv.addSampleBtn.SetBounds(geometry.NewRect(b.Min.X+(b.Width()-sampleBtnW)/2, emptyY+68, sampleBtnW, 26))
+			pv.addSampleBtn.Draw(ctx, canvas)
+		}
 	} else {
 		listY := topY + 36
 		for _, p := range pv.projects {
@@ -243,11 +245,11 @@ func (pv *ProjectView) Draw(ctx widget.Context, canvas widget.Canvas) {
 				stripRect := geometry.NewRect(cardRect.Min.X, cardRect.Min.Y, 4, cardH)
 				canvas.DrawRoundRect(stripRect, ParseHexColor(p.Color), 2)
 
-				// Delete button (✕)
+				// Delete button (x)
 				delRect := geometry.NewRect(cardRect.Max.X-24, cardRect.Min.Y+6, 18, 18)
 				pv.deleteBtnBounds[p.ID] = delRect
 				canvas.DrawRoundRect(delRect, widget.RGBA8(46, 52, 68, 200), 4)
-				canvas.DrawText("✕", delRect, 10, widget.RGBA8(239, 68, 68, 255), true, widget.TextAlignCenter)
+				canvas.DrawText("x", delRect, 11, widget.RGBA8(239, 68, 68, 255), true, widget.TextAlignCenter)
 
 				// Project & Customer title
 				title := fmt.Sprintf("[%s] %s", p.CustomerName, p.Name)
@@ -300,7 +302,7 @@ func (pv *ProjectView) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	// Modal editor overlay
 	if pv.projectEditor != nil {
-		canvas.DrawRoundRect(b, widget.RGBA8(10, 14, 22, 215), 12)
+		canvas.DrawRoundRect(b, widget.RGBA8(10, 14, 22, 235), 12)
 
 		modalW := float32(380)
 		modalH := float32(340)

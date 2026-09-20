@@ -50,14 +50,14 @@ func NewExportView(repo db.Repository, onRequestRedraw func()) *ExportView {
 	ev.SetVisible(true)
 	ev.SetEnabled(true)
 
-	ev.prevMonthBtn = NewGlassButton("◀", func() {
+	ev.prevMonthBtn = NewGlassButton("<", func() {
 		t := time.Date(ev.selectedYear, ev.selectedMonth, 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0)
 		ev.selectedYear = t.Year()
 		ev.selectedMonth = t.Month()
 		ev.Refresh()
 	}).SetCompact(true)
 
-	ev.nextMonthBtn = NewGlassButton("▶", func() {
+	ev.nextMonthBtn = NewGlassButton(">", func() {
 		t := time.Date(ev.selectedYear, ev.selectedMonth, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
 		ev.selectedYear = t.Year()
 		ev.selectedMonth = t.Month()
@@ -76,12 +76,12 @@ func NewExportView(repo db.Repository, onRequestRedraw func()) *ExportView {
 		ev.Refresh()
 	}).SetCompact(true)
 
-	ev.exportBtn = NewGlassButton("📥 Als CSV exportieren", func() {
+	ev.exportBtn = NewGlassButton("Als CSV exportieren", func() {
 		ev.doExportCSV()
 	})
 	ev.exportBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 
-	ev.copyBtn = NewGlassButton("📋 In Zwischenablage kopieren", func() {
+	ev.copyBtn = NewGlassButton("In Zwischenablage kopieren", func() {
 		ev.doCopyClipboard()
 	})
 
@@ -121,7 +121,7 @@ func (ev *ExportView) doExportCSV() {
 	if err != nil {
 		ev.statusMessage = fmt.Sprintf("Fehler: %v", err)
 	} else {
-		ev.statusMessage = fmt.Sprintf("✓ Gespeichert auf dem Schreibtisch:\n%s", filepath.Base(targetFile))
+		ev.statusMessage = fmt.Sprintf("Gespeichert auf dem Schreibtisch:\n%s", filepath.Base(targetFile))
 	}
 	if ev.onRequestRedraw != nil {
 		ev.onRequestRedraw()
@@ -147,9 +147,9 @@ func (ev *ExportView) doCopyClipboard() {
 			_, _ = pipe.Write([]byte(csvContent))
 			_ = pipe.Close()
 			_ = cmd.Wait()
-			ev.statusMessage = "✓ CSV erfolgreich in die Zwischenablage kopiert!"
+			ev.statusMessage = "CSV erfolgreich in die Zwischenablage kopiert!"
 		} else {
-			ev.statusMessage = "✓ Generiert (pbcopy nicht verfügbar)"
+			ev.statusMessage = "Generiert (pbcopy nicht verfügbar)"
 		}
 	}
 	if ev.onRequestRedraw != nil {

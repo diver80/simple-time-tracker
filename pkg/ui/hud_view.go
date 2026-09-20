@@ -73,7 +73,7 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 			}
 		}
 	})
-	h.notesInput = NewTextInput("Hier Notizen eintragen …", true, func(text string) {
+	h.notesInput = NewTextInput("Hier Notizen eintragen ...", true, func(text string) {
 		h.inputBookingText = text
 		if h.activeEntry != nil {
 			if err := h.timerSvc.UpdateBookingText(text); err != nil {
@@ -101,7 +101,7 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 	}
 
 	// Initialize Buttons
-	h.startBtn = NewGlassButton("▶ Start Timer", func() {
+	h.startBtn = NewGlassButton("Start Timer", func() {
 		var projID *int64
 		if h.selectedProject != nil {
 			projID = &h.selectedProject.ID
@@ -120,7 +120,7 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 	})
 	h.startBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.AccentHover)
 
-	h.stopBtn = NewGlassButton("■ Stopp", func() {
+	h.stopBtn = NewGlassButton("Stopp", func() {
 		_, _ = h.timerSvc.Stop()
 		h.inputTaskName = ""
 		h.inputBookingText = ""
@@ -128,24 +128,24 @@ func NewHUDView(timerSvc *timer.TimerService, repo db.Repository, onRequestRedra
 	})
 	h.stopBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.StopColor, widget.RGBA8(220, 38, 38, 255))
 
-	h.quickShiftBtn = NewGlassButton("⚡ QuickShift", func() {
+	h.quickShiftBtn = NewGlassButton("QuickShift", func() {
 		_, _ = h.timerSvc.StartQuickShift("Unterbrechung / Anruf")
 		h.refreshState()
 	})
 	h.quickShiftBtn.SetCustomColors(widget.RGBA8(0, 0, 0, 255), DefaultDarkTheme.QuickShiftColor, widget.RGBA8(217, 119, 6, 255))
 
-	h.finishQSBtn = NewGlassButton("✓ Unterbrechung beenden & Hauptaufgabe fortsetzen", func() {
+	h.finishQSBtn = NewGlassButton("Unterbrechung beenden & fortsetzen", func() {
 		_ = h.timerSvc.FinishQuickShift()
 		h.refreshState()
 	})
 	h.finishQSBtn.SetCustomColors(widget.RGBA8(0, 0, 0, 255), DefaultDarkTheme.QuickShiftColor, widget.RGBA8(217, 119, 6, 255))
 
-	h.pauseBtn = NewGlassButton("⏸ Pause", func() {
+	h.pauseBtn = NewGlassButton("Pause", func() {
 		_ = h.timerSvc.Pause()
 		h.refreshState()
 	})
 
-	h.resumeBtn = NewGlassButton("▶ Weiter", func() {
+	h.resumeBtn = NewGlassButton("Weiter", func() {
 		_ = h.timerSvc.Resume()
 		h.refreshState()
 	})
@@ -216,7 +216,7 @@ func (h *HUDView) Draw(ctx widget.Context, canvas widget.Canvas) {
 		qsBanner := geometry.NewRect(b.Min.X+16, headerY, b.Width()-32, 28)
 		canvas.DrawRoundRect(qsBanner, theme.QuickShiftBg, 6)
 		canvas.StrokeRoundRect(qsBanner, theme.QuickShiftColor, 6, 1.0)
-		canvas.DrawText("⚡ QuickShift aktiv: Haupttimer wartet im Hintergrund",
+		canvas.DrawText("QuickShift aktiv: Haupttimer wartet im Hintergrund",
 			geometry.NewRect(qsBanner.Min.X+8, qsBanner.Min.Y+6, qsBanner.Width()-16, 16),
 			11, theme.QuickShiftColor, true, widget.TextAlignCenter)
 		headerY += 36

@@ -440,3 +440,44 @@ func TestProjectViewChildren(t *testing.T) {
 	}
 }
 
+func TestProjectEditorCleanButtonLabelsAndSolidModal(t *testing.T) {
+	repo, err := db.NewRepository(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+
+	pv := NewProjectView(repo, nil)
+	pv.SetBounds(geometry.NewRect(0, 0, 420, 560))
+
+	// In initial empty state, addSampleBtn has non-zero bounds after Draw
+	mockCtx := &testWidgetContext{}
+	pv.Draw(mockCtx, &testCanvas{})
+	sampleBoundsBefore := pv.addSampleBtn.Bounds()
+	if sampleBoundsBefore.Width() == 0 {
+		t.Fatalf("expected addSampleBtn to have non-zero bounds in empty state")
+	}
+
+	// Open editor modal
+	pv.openProjectEditor()
+	if pv.projectEditor == nil {
+		t.Fatalf("expected projectEditor to be open")
+	}
+
+	// Check clean button labels (no emoji/unicode tofu)
+	if pv.projectEditor.saveBtn.text != "Speichern" {
+		t.Fatalf("expected saveBtn text to be 'Speichern', got %q", pv.projectEditor.saveBtn.text)
+	}
+	if pv.projectEditor.cancelBtn.text != "Abbrechen" {
+		t.Fatalf("expected cancelBtn text to be 'Abbrechen', got %q", pv.projectEditor.cancelBtn.text)
+	}
+
+	// Reset addSampleBtn bounds to verify it is NOT drawn while modal is open
+	pv.addSampleBtn.SetBounds(geometry.NewRect(0, 0, 0, 0))
+	pv.Draw(mockCtx, &testCanvas{})
+	if pv.addSampleBtn.Bounds().Width() != 0 {
+		t.Fatalf("expected addSampleBtn NOT to be drawn while modal editor is open")
+	}
+}
+
+

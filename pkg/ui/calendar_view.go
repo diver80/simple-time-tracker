@@ -59,7 +59,7 @@ func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
 	cv.SetVisible(true)
 	cv.SetEnabled(true)
 
-	cv.prevBtn = NewGlassButton("◀ Gestern", func() {
+	cv.prevBtn = NewGlassButton("< Gestern", func() {
 		cv.currentDay = cv.currentDay.AddDate(0, 0, -1)
 		cv.Refresh()
 	}).SetCompact(true)
@@ -69,7 +69,7 @@ func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
 		cv.Refresh()
 	}).SetCompact(true)
 
-	cv.nextBtn = NewGlassButton("Morgen ▶", func() {
+	cv.nextBtn = NewGlassButton("Morgen >", func() {
 		cv.currentDay = cv.currentDay.AddDate(0, 0, 1)
 		cv.Refresh()
 	}).SetCompact(true)
@@ -78,9 +78,14 @@ func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
 		cv.openEditor(nil)
 	}).SetCompact(true)
 
-	cv.listModeBtn = NewGlassButton("📋", func() {
+	cv.listModeBtn = NewGlassButton("Liste", func() {
 		cv.isListMode = !cv.isListMode
 		cv.listScrollOffset = 0
+		if cv.isListMode {
+			cv.listModeBtn.SetText("Tag")
+		} else {
+			cv.listModeBtn.SetText("Liste")
+		}
 		if cv.onRequestRedraw != nil {
 			cv.onRequestRedraw()
 		}
@@ -196,7 +201,13 @@ func (cv *CalendarView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	cv.addBtn.SetBounds(geometry.NewRect(b.Min.X+16, actionY, 80, 24))
 	cv.addBtn.Draw(ctx, canvas)
 
-	cv.listModeBtn.SetBounds(geometry.NewRect(b.Max.X-40, actionY, 24, 24))
+	listBtnW := float32(50)
+	if cv.isListMode {
+		cv.listModeBtn.SetText("Tag")
+	} else {
+		cv.listModeBtn.SetText("Liste")
+	}
+	cv.listModeBtn.SetBounds(geometry.NewRect(b.Max.X-16-listBtnW, actionY, listBtnW, 24))
 	cv.listModeBtn.Draw(ctx, canvas)
 
 	if hasActiveEntry {
@@ -316,7 +327,7 @@ func (cv *CalendarView) drawTimelineMode(ctx widget.Context, canvas widget.Canva
 		// Title inside block
 		titleText := entry.TaskName
 		if entry.IsQuickShift {
-			titleText = "⚡ " + entry.TaskName
+			titleText = "[QuickShift] " + entry.TaskName
 		} else if entry.ProjectName != "" {
 			titleText = fmt.Sprintf("[%s] %s", entry.ProjectName, entry.TaskName)
 		}
@@ -381,7 +392,7 @@ func (cv *CalendarView) drawListMode(ctx widget.Context, canvas widget.Canvas, b
 		// Entry text
 		titleText := entry.TaskName
 		if entry.IsQuickShift {
-			titleText = "⚡ " + entry.TaskName
+			titleText = "[QuickShift] " + entry.TaskName
 		} else if entry.ProjectName != "" {
 			titleText = fmt.Sprintf("[%s] %s", entry.ProjectName, entry.TaskName)
 		}

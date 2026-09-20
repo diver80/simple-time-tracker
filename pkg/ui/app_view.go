@@ -104,7 +104,7 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	}).SetCompact(true)
 
 	// Temp Hide Snooze Buttons
-	a.hide15Btn = NewGlassButton("🙈 15m Call", func() {
+	a.hide15Btn = NewGlassButton("15m Call", func() {
 		a.showPrivacyOverlay = false
 		if a.winMgr != nil {
 			a.winMgr.TempHide(15 * time.Minute)
@@ -114,7 +114,7 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		}
 	})
 
-	a.hide30Btn = NewGlassButton("🙈 30m Call", func() {
+	a.hide30Btn = NewGlassButton("30m Call", func() {
 		a.showPrivacyOverlay = false
 		if a.winMgr != nil {
 			a.winMgr.TempHide(30 * time.Minute)
@@ -124,7 +124,7 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		}
 	})
 
-	a.hide60Btn = NewGlassButton("🙈 60m Call", func() {
+	a.hide60Btn = NewGlassButton("60m Call", func() {
 		a.showPrivacyOverlay = false
 		if a.winMgr != nil {
 			a.winMgr.TempHide(60 * time.Minute)
@@ -134,7 +134,7 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		}
 	})
 
-	a.hideNowBtn = NewGlassButton("🙈 Bis Klick", func() {
+	a.hideNowBtn = NewGlassButton("Bis Klick", func() {
 		a.showPrivacyOverlay = false
 		if a.winMgr != nil {
 			a.winMgr.TempHide(0)
@@ -144,20 +144,20 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 		}
 	})
 
-	a.maskToggleBtn = NewGlassButton("🔒 Vertrauliche Daten maskieren", func() {
+	a.maskToggleBtn = NewGlassButton("Vertrauliche Daten maskieren", func() {
 		a.privacyMasked = !a.privacyMasked
 		a.hudView.SetPrivacyMasked(a.privacyMasked)
 		if a.privacyMasked {
-			a.maskToggleBtn.SetText("👁️ Maskierung aufheben (Sichtbar)")
+			a.maskToggleBtn.SetText("Maskierung aufheben (Sichtbar)")
 		} else {
-			a.maskToggleBtn.SetText("🔒 Vertrauliche Daten maskieren")
+			a.maskToggleBtn.SetText("Vertrauliche Daten maskieren")
 		}
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
 		}
 	})
 
-	a.closeOverlayBtn = NewGlassButton("✕ Schließen", func() {
+	a.closeOverlayBtn = NewGlassButton("Schließen", func() {
 		a.showPrivacyOverlay = false
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
@@ -344,12 +344,12 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 		canvas.StrokeRoundRect(overlayRect, theme.AccentPrimary, 12, 1.5)
 
 		// Header
-		canvas.DrawText("🛡️ Screen Sharing & Call Schutz",
+		canvas.DrawText("Screen Sharing & Call Schutz",
 			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+20, overlayRect.Width()-32, 22),
 			15, widget.RGBA8(255, 255, 255, 255), true, widget.TextAlignCenter)
 
 		// Status Badge
-		canvas.DrawText("✓ macOS Screen-Capture Shield ist AKTIV",
+		canvas.DrawText("macOS Screen-Capture Shield ist AKTIV",
 			geometry.NewRect(overlayRect.Min.X+16, overlayRect.Min.Y+48, overlayRect.Width()-32, 18),
 			12, theme.AccentPrimary, true, widget.TextAlignCenter)
 

@@ -78,11 +78,13 @@ func NewEntryEditor(repo db.Repository, entry *db.TimeEntry, currentDay time.Tim
 		ed.isDraft = true
 	})
 
-	ed.saveBtn = NewGlassButton("💾 Speichern", ed.handleSave).SetCompact(true)
-	ed.cancelBtn = NewGlassButton("✕ Abbrechen", ed.handleCancel).SetCompact(true)
-	ed.deleteBtn = NewGlassButton("🗑️ Löschen", ed.handleDeleteClick).SetCompact(true)
-	ed.confirmDeleteBtn = NewGlassButton("✓ Löschen", ed.handleDeleteConfirm).SetCompact(true)
-	ed.cancelDeleteBtn = NewGlassButton("✕ Abbrechen", ed.handleDeleteCancel).SetCompact(true)
+	ed.saveBtn = NewGlassButton("Speichern", ed.handleSave).SetCompact(true)
+	ed.saveBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.AccentPrimary, DefaultDarkTheme.CardBorder)
+	ed.cancelBtn = NewGlassButton("Abbrechen", ed.handleCancel).SetCompact(true)
+	ed.deleteBtn = NewGlassButton("Löschen", ed.handleDeleteClick).SetCompact(true)
+	ed.confirmDeleteBtn = NewGlassButton("Löschen", ed.handleDeleteConfirm).SetCompact(true)
+	ed.confirmDeleteBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), DefaultDarkTheme.StopColor, widget.RGBA8(220, 38, 38, 255))
+	ed.cancelDeleteBtn = NewGlassButton("Abbrechen", ed.handleDeleteCancel).SetCompact(true)
 	ed.plus15Btn = NewGlassButton("+15m", func() {
 		ed.addDuration(15 * time.Minute)
 	}).SetCompact(true)
@@ -146,9 +148,9 @@ func (ed *EntryEditor) Draw(ctx widget.Context, canvas widget.Canvas) {
 	b := ed.Bounds()
 	theme := &DefaultDarkTheme
 
-	// Background
-	canvas.DrawRoundRect(b, theme.CardBg, 12)
-	canvas.StrokeRoundRect(b, theme.CardBorder, 12, 1.0)
+	// Background: 100% opaque solid card to ensure no underlying elements bleed through
+	canvas.DrawRoundRect(b, widget.RGBA8(24, 28, 38, 255), 12)
+	canvas.StrokeRoundRect(b, widget.RGBA8(60, 70, 92, 255), 12, 1.0)
 
 	// Title with active entry warning
 	titleText := "Neue Buchung"
@@ -163,7 +165,7 @@ func (ed *EntryEditor) Draw(ctx widget.Context, canvas widget.Canvas) {
 	// Active entry warning
 	if ed.entry != nil && ed.entry.EndedAt == nil {
 		warningY := b.Min.Y + 36
-		canvas.DrawText("⚠ Kann nicht bearbeitet werden, während aktiv", geometry.NewRect(b.Min.X+16, warningY, b.Width()-32, 24), 10, widget.RGBA8(255, 152, 0, 255), true, widget.TextAlignLeft)
+		canvas.DrawText("Hinweis: Kann nicht bearbeitet werden, während aktiv", geometry.NewRect(b.Min.X+16, warningY, b.Width()-32, 24), 10, widget.RGBA8(255, 152, 0, 255), true, widget.TextAlignLeft)
 	}
 
 	// Form layout (simple vertical stacking)
@@ -427,7 +429,7 @@ func (ed *EntryEditor) handleSave() {
 
 	// Block save if entry is active (being edited/running)
 	if ed.entry != nil && ed.entry.EndedAt == nil {
-		ed.errorMessage = "⚠ Kann nicht bearbeitet werden, während aktiv"
+		ed.errorMessage = "Hinweis: Kann nicht bearbeitet werden, während aktiv"
 		if ed.onRequestRedraw != nil {
 			ed.onRequestRedraw()
 		}
@@ -575,7 +577,7 @@ func (ed *EntryEditor) handleCancel() {
 func (ed *EntryEditor) handleDeleteClick() {
 	// Block delete if entry is active
 	if ed.entry != nil && ed.entry.EndedAt == nil {
-		ed.errorMessage = "⚠ Kann nicht löschen, während aktiv"
+		ed.errorMessage = "Hinweis: Kann nicht gelöscht werden, während aktiv"
 		if ed.onRequestRedraw != nil {
 			ed.onRequestRedraw()
 		}
