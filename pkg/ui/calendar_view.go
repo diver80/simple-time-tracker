@@ -45,8 +45,8 @@ type CalendarView struct {
 }
 
 const (
-	dayStartHour = 7  // 07:00
-	dayEndHour   = 21 // 21:00
+	dayStartHour = 0  // 00:00
+	dayEndHour   = 24 // 24:00
 )
 
 func NewCalendarView(repo db.Repository, onRequestRedraw func()) *CalendarView {
@@ -259,11 +259,15 @@ func (cv *CalendarView) drawTimelineMode(ctx widget.Context, canvas widget.Canva
 	for h := dayStartHour; h <= dayEndHour; h++ {
 		curY := contentTop + float32(h-dayStartHour)*hourHeight
 		timeLbl := fmt.Sprintf("%02d:00", h)
-		canvas.DrawText(timeLbl, geometry.NewRect(b.Min.X+10, curY-6, 38, 14), 10, theme.TextMuted, false, widget.TextAlignRight)
+		canvas.DrawText(timeLbl, geometry.NewRect(b.Min.X+8, curY-6, 40, 12), 9, theme.TextMuted, false, widget.TextAlignRight)
 
-		// Subtle divider line
+		// Subtle divider line (more pronounced on even hours)
 		lineRect := geometry.NewRect(timelineGutterX, curY, timelineWidth, 1)
-		canvas.DrawRect(lineRect, widget.RGBA8(40, 46, 60, 160))
+		if h%2 == 0 {
+			canvas.DrawRect(lineRect, widget.RGBA8(50, 58, 76, 180))
+		} else {
+			canvas.DrawRect(lineRect, widget.RGBA8(35, 42, 54, 120))
+		}
 	}
 
 	// Draw Task Time Blocks
@@ -290,11 +294,11 @@ func (cv *CalendarView) drawTimelineMode(ctx widget.Context, canvas widget.Canva
 
 		blockY := contentTop + (startHour-float32(dayStartHour))*hourHeight
 		blockH := durHours * hourHeight
+		if blockH < 18 {
+			blockH = 18
+		}
 		if blockY+blockH > contentBottom {
 			blockH = contentBottom - blockY
-		}
-		if blockH < 20 {
-			blockH = 20
 		}
 
 		blockRect := geometry.NewRect(timelineGutterX+4, blockY, timelineWidth-8, blockH)
@@ -333,9 +337,9 @@ func (cv *CalendarView) drawTimelineMode(ctx widget.Context, canvas widget.Canva
 		}
 
 		timeRange := fmt.Sprintf("%s (%s)", entry.StartedAt.Local().Format("15:04"), timer.FormatDurationHHMM(time.Duration(entry.DurationSec)*time.Second))
-		canvas.DrawText(titleText, geometry.NewRect(blockRect.Min.X+8, blockRect.Min.Y+3, blockRect.Width()-14, 14), 10, theme.TextPrimary, true, widget.TextAlignLeft)
-		if blockH >= 34 {
-			canvas.DrawText(timeRange, geometry.NewRect(blockRect.Min.X+8, blockRect.Min.Y+18, blockRect.Width()-14, 12), 9, theme.TextSecondary, false, widget.TextAlignLeft)
+		canvas.DrawText(titleText, geometry.NewRect(blockRect.Min.X+8, blockRect.Min.Y+2, blockRect.Width()-14, 13), 9, theme.TextPrimary, true, widget.TextAlignLeft)
+		if blockH >= 28 {
+			canvas.DrawText(timeRange, geometry.NewRect(blockRect.Min.X+8, blockRect.Min.Y+15, blockRect.Width()-14, 11), 8, theme.TextSecondary, false, widget.TextAlignLeft)
 		}
 	}
 

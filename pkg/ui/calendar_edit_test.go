@@ -684,7 +684,7 @@ func TestCalendarTimelineClickToCreate(t *testing.T) {
 	cv.Draw(mockCtx, &testCanvas{})
 
 	// Simulate clicking on the timeline at 14:00 (Y coordinate inside content area)
-	// Day starts at 7, ends at 21. Content top is ~84, bottom is ~590.
+	// Day starts at 0, ends at 24. Content top is ~84, bottom is ~590.
 	contentTop := float32(84)
 	contentBottom := float32(590)
 	hourHeight := (contentBottom - contentTop) / float32(dayEndHour-dayStartHour)
@@ -701,6 +701,36 @@ func TestCalendarTimelineClickToCreate(t *testing.T) {
 	startStr := cv.editor.startDTInput.Text()
 	if !strings.Contains(startStr, "14:00") {
 		t.Errorf("expected editor start time to be 14:00, got: %s", startStr)
+	}
+}
+
+func TestCalendarTimelineClickToCreate_NightHour(t *testing.T) {
+	repo, _ := db.NewRepository(":memory:")
+	defer repo.Close()
+
+	cv := NewCalendarView(repo, nil)
+	cv.SetBounds(geometry.NewRect(0, 0, 420, 640))
+
+	mockCtx := &testWidgetContext{}
+	cv.Draw(mockCtx, &testCanvas{})
+
+	// Simulate clicking on the timeline at 03:00 (Y coordinate inside content area)
+	contentTop := float32(84)
+	contentBottom := float32(590)
+	hourHeight := (contentBottom - contentTop) / float32(dayEndHour-dayStartHour)
+	targetY := contentTop + float32(3-dayStartHour)*hourHeight + 5
+
+	clickPt := geometry.Pt(100, targetY)
+	pressEv := event.NewMouseEvent(event.MousePress, event.ButtonLeft, 0, clickPt, clickPt, event.ModNone)
+
+	handled := cv.Event(mockCtx, pressEv)
+	if !handled || cv.editor == nil {
+		t.Fatalf("expected clicking night timeline slot at 03:00 to open editor, handled=%v, editor=%v", handled, cv.editor)
+	}
+
+	startStr := cv.editor.startDTInput.Text()
+	if !strings.Contains(startStr, "03:00") {
+		t.Errorf("expected editor start time to be 03:00, got: %s", startStr)
 	}
 }
 
