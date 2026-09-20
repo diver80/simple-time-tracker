@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"time"
 
 	"time-tracker/pkg/db"
@@ -80,24 +79,24 @@ func NewAppView(repo db.Repository, timerSvc *timer.TimerService, winMgr window.
 	a.projectView = NewProjectView(repo, onRequestRedraw)
 
 	// Create Tab Buttons
-	a.tabTrackerBtn = NewGlassButton("⏱️ Tracker", func() {
+	a.tabTrackerBtn = NewGlassButton("Tracker", func() {
 		a.SwitchTab(TabTracker)
 	}).SetCompact(true)
 
-	a.tabCalendarBtn = NewGlassButton("📅 Tag", func() {
+	a.tabCalendarBtn = NewGlassButton("Tag", func() {
 		a.SwitchTab(TabCalendar)
 	}).SetCompact(true)
 
-	a.tabExportBtn = NewGlassButton("📊 Export", func() {
+	a.tabExportBtn = NewGlassButton("Export", func() {
 		a.SwitchTab(TabExport)
 	}).SetCompact(true)
 
-	a.tabProjectsBtn = NewGlassButton("📁 Budgets", func() {
+	a.tabProjectsBtn = NewGlassButton("Budgets", func() {
 		a.SwitchTab(TabProjects)
 	}).SetCompact(true)
 
 	// Screen Sharing Shield Button
-	a.tabShieldBtn = NewGlassButton("🛡️", func() {
+	a.tabShieldBtn = NewGlassButton("Schutz", func() {
 		a.showPrivacyOverlay = !a.showPrivacyOverlay
 		if a.onRequestRedraw != nil {
 			a.onRequestRedraw()
@@ -188,14 +187,10 @@ func (a *AppView) refreshTimerState() {
 
 func (a *AppView) updateTrackerTabLabel() {
 	switch a.timerState {
-	case timer.StateRunning:
-		a.tabTrackerBtn.SetText(fmt.Sprintf("⏱️ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
-	case timer.StateQuickShift:
-		a.tabTrackerBtn.SetText(fmt.Sprintf("⚡ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
-	case timer.StatePaused:
-		a.tabTrackerBtn.SetText(fmt.Sprintf("⏸️ %s", timer.FormatDurationHHMMSS(a.timerElapsed)))
+	case timer.StateRunning, timer.StateQuickShift, timer.StatePaused:
+		a.tabTrackerBtn.SetText(timer.FormatDurationHHMMSS(a.timerElapsed))
 	default:
-		a.tabTrackerBtn.SetText("⏱️ Tracker")
+		a.tabTrackerBtn.SetText("Tracker")
 	}
 }
 
@@ -269,8 +264,8 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	// Top Tab Bar
 	tabY := b.Min.Y + 10
 
-	// Tab Tracker: width 94 to fit "⏱️ 00:00:00" cleanly
-	a.tabTrackerBtn.SetBounds(geometry.NewRect(b.Min.X+16, tabY, 94, 26))
+	// Tab Tracker: width 84 to fit "00:00:00" cleanly
+	a.tabTrackerBtn.SetBounds(geometry.NewRect(b.Min.X+16, tabY, 84, 26))
 	if a.activeTab == TabTracker {
 		a.tabTrackerBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
 	} else if a.timerState == timer.StateRunning {
@@ -286,8 +281,8 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 	a.tabTrackerBtn.Draw(ctx, canvas)
 
-	// Tab Calendar: width 74
-	a.tabCalendarBtn.SetBounds(geometry.NewRect(b.Min.X+114, tabY, 74, 26))
+	// Tab Calendar: width 64
+	a.tabCalendarBtn.SetBounds(geometry.NewRect(b.Min.X+106, tabY, 64, 26))
 	if a.activeTab == TabCalendar {
 		a.tabCalendarBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
 	} else {
@@ -295,8 +290,8 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 	a.tabCalendarBtn.Draw(ctx, canvas)
 
-	// Tab Export: width 82
-	a.tabExportBtn.SetBounds(geometry.NewRect(b.Min.X+192, tabY, 82, 26))
+	// Tab Export: width 78
+	a.tabExportBtn.SetBounds(geometry.NewRect(b.Min.X+176, tabY, 78, 26))
 	if a.activeTab == TabExport {
 		a.tabExportBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
 	} else {
@@ -305,7 +300,7 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	a.tabExportBtn.Draw(ctx, canvas)
 
 	// Tab Projects: width 84
-	a.tabProjectsBtn.SetBounds(geometry.NewRect(b.Min.X+278, tabY, 84, 26))
+	a.tabProjectsBtn.SetBounds(geometry.NewRect(b.Min.X+260, tabY, 84, 26))
 	if a.activeTab == TabProjects {
 		a.tabProjectsBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
 	} else {
@@ -313,8 +308,8 @@ func (a *AppView) Draw(ctx widget.Context, canvas widget.Canvas) {
 	}
 	a.tabProjectsBtn.Draw(ctx, canvas)
 
-	// Screen Sharing Shield Button: width 36
-	a.tabShieldBtn.SetBounds(geometry.NewRect(b.Min.X+368, tabY, 36, 26))
+	// Screen Sharing Shield Button: width 54
+	a.tabShieldBtn.SetBounds(geometry.NewRect(b.Min.X+350, tabY, 54, 26))
 	if a.showPrivacyOverlay {
 		a.tabShieldBtn.SetCustomColors(widget.RGBA8(255, 255, 255, 255), theme.TabActive, theme.AccentPrimary)
 	} else if a.privacyMasked {

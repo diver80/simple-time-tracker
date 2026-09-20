@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	version = "1.0.0"
+	version = "1.0.1"
 )
 
 func resolveDefaultDBPath(homeDir string) string {
@@ -75,7 +75,7 @@ func migrateLegacyDB(destPath string, legacyPaths []string) bool {
 
 func main() {
 	dbFlag := flag.String("db", "", "Path to SQLite database file")
-	demoFlag := flag.Bool("demo", true, "Auto-seed demo clients and projects if database is empty")
+	demoFlag := flag.Bool("demo", false, "Auto-seed demo clients and projects if database is empty")
 	flag.Parse()
 
 	dbPath := *dbFlag
