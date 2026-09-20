@@ -201,6 +201,14 @@ func TestProjectViewOpenEditorModal(t *testing.T) {
 	mockCtx := &testWidgetContext{}
 	pv.Draw(mockCtx, &testCanvas{})
 
+	// Verify redraw is requested on validation error (wires SetOnRequestRedraw)
+	redrawCalled = false
+	pv.projectEditor.projectInput.SetText("")
+	pv.projectEditor.handleSave()
+	if !redrawCalled {
+		t.Fatalf("expected redraw to be requested on validation error in editor")
+	}
+
 	// Cancel editor
 	pv.projectEditor.handleCancel()
 	if pv.projectEditor != nil {
@@ -267,12 +275,23 @@ func TestProjectEditorValidationAndDefaults(t *testing.T) {
 
 	editor := NewProjectEditor(repo, nil, nil)
 
-	// Invalid rate
+	// Auto-focus on customer input
+	if !editor.customerInput.IsFocused() {
+		t.Fatalf("expected customerInput to be auto-focused on modal creation")
+	}
+
+	// Invalid rate should fail and NOT create a customer in DB
+	editor.customerInput.SetText("Orphan Check Customer")
 	editor.projectInput.SetText("Test Proj")
 	editor.rateInput.SetText("not-a-number")
 	editor.handleSave()
 	if editor.errorMessage == "" {
 		t.Fatalf("expected error for non-numeric rate")
+	}
+
+	custsAfterFail, _ := repo.ListCustomers()
+	if len(custsAfterFail) != 0 {
+		t.Fatalf("expected no customer created when rate validation fails, found %d", len(custsAfterFail))
 	}
 
 	// Negative rate
@@ -283,13 +302,37 @@ func TestProjectEditorValidationAndDefaults(t *testing.T) {
 		t.Fatalf("expected error for negative rate")
 	}
 
-	// Invalid hours
+	// Invalid hours should not create customer either
 	editor.errorMessage = ""
 	editor.rateInput.SetText("100")
 	editor.hoursInput.SetText("invalid")
 	editor.handleSave()
 	if editor.errorMessage == "" {
 		t.Fatalf("expected error for non-numeric hours")
+	}
+	custsAfterHoursFail, _ := repo.ListCustomers()
+	if len(custsAfterHoursFail) != 0 {
+		t.Fatalf("expected no customer created when hours validation fails, found %d", len(custsAfterHoursFail))
+	}
+
+	// Comma decimal support (German formatting: 125,50 €/h and 37,5 h)
+	editor.errorMessage = ""
+	editor.customerInput.SetText("Acme Comma Corp")
+	editor.projectInput.SetText("Comma Project")
+	editor.rateInput.SetText("125,50")
+	editor.hoursInput.SetText("40,0")
+
+	saved := false
+	editor.onSaved = func() { saved = true }
+	editor.handleSave()
+
+	if !saved {
+		t.Fatalf("expected save to succeed with comma decimals, got error: %s", editor.errorMessage)
+	}
+
+	projs, _ := repo.ListProjects(nil)
+	if len(projs) != 1 || projs[0].HourlyRate != 125.5 || projs[0].BudgetHours != 40.0 {
+		t.Fatalf("expected project rate 125.5 and hours 40.0, got rate=%f, hours=%f", projs[0].HourlyRate, projs[0].BudgetHours)
 	}
 
 	// Default customer name to "Standard" when blank
@@ -299,8 +342,7 @@ func TestProjectEditorValidationAndDefaults(t *testing.T) {
 	editor.rateInput.SetText("0")
 	editor.hoursInput.SetText("0")
 
-	saved := false
-	editor.onSaved = func() { saved = true }
+	saved = false
 	editor.handleSave()
 
 	if !saved {
@@ -308,7 +350,13 @@ func TestProjectEditorValidationAndDefaults(t *testing.T) {
 	}
 
 	custs, _ := repo.ListCustomers()
-	if len(custs) != 1 || custs[0].Name != "Standard" {
+	hasStandard := false
+	for _, c := range custs {
+		if c.Name == "Standard" {
+			hasStandard = true
+		}
+	}
+	if !hasStandard {
 		t.Fatalf("expected customer 'Standard', got %v", custs)
 	}
 }
@@ -323,29 +371,29 @@ func TestProjectEditorTabCycling(t *testing.T) {
 	mockCtx := &testWidgetContext{}
 	editor := NewProjectEditor(repo, nil, nil)
 
-	// Initially customerInput should get focus on first Tab
-	tabEv := event.NewKeyEvent(event.KeyPress, event.KeyTab, 0, event.ModNone)
-	handled := editor.Event(mockCtx, tabEv)
-	if !handled || !editor.customerInput.IsFocused() {
-		t.Fatalf("expected first tab to focus customerInput, handled=%v, focused=%v", handled, editor.customerInput.IsFocused())
+	// customerInput is auto-focused initially
+	if !editor.customerInput.IsFocused() {
+		t.Fatalf("expected customerInput to be auto-focused initially")
 	}
 
-	// Next tab should focus projectInput
-	editor.Event(mockCtx, tabEv)
-	if !editor.projectInput.IsFocused() {
-		t.Fatalf("expected second tab to focus projectInput")
+	tabEv := event.NewKeyEvent(event.KeyPress, event.KeyTab, 0, event.ModNone)
+
+	// First tab should move to projectInput
+	handled := editor.Event(mockCtx, tabEv)
+	if !handled || !editor.projectInput.IsFocused() {
+		t.Fatalf("expected first tab to focus projectInput, handled=%v, focused=%v", handled, editor.projectInput.IsFocused())
 	}
 
 	// Next tab should focus rateInput
 	editor.Event(mockCtx, tabEv)
 	if !editor.rateInput.IsFocused() {
-		t.Fatalf("expected third tab to focus rateInput")
+		t.Fatalf("expected second tab to focus rateInput")
 	}
 
 	// Next tab should focus hoursInput
 	editor.Event(mockCtx, tabEv)
 	if !editor.hoursInput.IsFocused() {
-		t.Fatalf("expected fourth tab to focus hoursInput")
+		t.Fatalf("expected third tab to focus hoursInput")
 	}
 
 	// Next tab should cycle back to customerInput

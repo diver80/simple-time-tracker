@@ -87,6 +87,7 @@ func (pv *ProjectView) openProjectEditor() {
 		}
 	})
 	pv.projectEditor.SetParent(pv)
+	pv.projectEditor.SetOnRequestRedraw(pv.onRequestRedraw)
 	if pv.onRequestRedraw != nil {
 		pv.onRequestRedraw()
 	}

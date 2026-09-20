@@ -55,6 +55,8 @@ func NewProjectEditor(repo db.Repository, onSaved func(), onCancel func()) *Proj
 	ed.saveBtn.SetParent(ed)
 	ed.cancelBtn.SetParent(ed)
 
+	ed.customerInput.SetFocused(true)
+
 	ed.SetVisible(true)
 	ed.SetEnabled(true)
 	return ed
@@ -239,17 +241,9 @@ func (ed *ProjectEditor) handleSave() {
 		custName = "Standard"
 	}
 
-	cust, err := ed.repo.CreateCustomerIfNotExists(custName)
-	if err != nil {
-		ed.errorMessage = fmt.Sprintf("Fehler beim Kunden: %v", err)
-		if ed.onRequestRedraw != nil {
-			ed.onRequestRedraw()
-		}
-		return
-	}
-
 	var rate float64
 	rateStr := strings.TrimSpace(ed.rateInput.Text())
+	rateStr = strings.ReplaceAll(rateStr, ",", ".")
 	if rateStr != "" {
 		r, err := strconv.ParseFloat(rateStr, 64)
 		if err != nil || r < 0 {
@@ -264,6 +258,7 @@ func (ed *ProjectEditor) handleSave() {
 
 	var hours float64
 	hoursStr := strings.TrimSpace(ed.hoursInput.Text())
+	hoursStr = strings.ReplaceAll(hoursStr, ",", ".")
 	if hoursStr != "" {
 		h, err := strconv.ParseFloat(hoursStr, 64)
 		if err != nil || h < 0 {
@@ -274,6 +269,15 @@ func (ed *ProjectEditor) handleSave() {
 			return
 		}
 		hours = h
+	}
+
+	cust, err := ed.repo.CreateCustomerIfNotExists(custName)
+	if err != nil {
+		ed.errorMessage = fmt.Sprintf("Fehler beim Kunden: %v", err)
+		if ed.onRequestRedraw != nil {
+			ed.onRequestRedraw()
+		}
+		return
 	}
 
 	budgetCost := rate * hours
