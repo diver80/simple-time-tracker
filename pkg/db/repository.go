@@ -16,12 +16,17 @@ import (
 type Repository interface {
 	Close() error
 	CreateCustomer(name string) (*Customer, error)
+	CreateCustomerIfNotExists(name string) (*Customer, error)
 	ListCustomers() ([]Customer, error)
 	GetCustomer(id int64) (*Customer, error)
+	DeleteCustomer(id int64) error
 
 	CreateProject(custID int64, name string, rate, budgetHours, budgetCost float64, color string) (*Project, error)
 	ListProjects(custID *int64) ([]Project, error)
 	GetProject(id int64) (*Project, error)
+	DeleteProject(id int64) error
+
+	ClearAllDemoData() error
 
 	StartTimeEntry(projectID *int64, taskName string, isBillable bool) (*TimeEntry, error)
 	StartQuickShift(parentID int64, taskName string) (*TimeEntry, error)
@@ -197,6 +202,65 @@ func (r *SQLiteRepository) GetCustomer(id int64) (*Customer, error) {
 	return &c, nil
 }
 
+func (r *SQLiteRepository) CreateCustomerIfNotExists(name string) (*Customer, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("customer name cannot be empty")
+	}
+
+	var c Customer
+	err := r.db.QueryRow("SELECT id, name, created_at FROM customers WHERE name = ?", name).
+		Scan(&c.ID, &c.Name, &c.CreatedAt)
+	if err == nil {
+		return &c, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	res, err := r.db.Exec("INSERT INTO customers (name, created_at) VALUES (?, ?)", name, now)
+	if err != nil {
+		// Handle race condition or duplicate key if inserted concurrently
+		err2 := r.db.QueryRow("SELECT id, name, created_at FROM customers WHERE name = ?", name).
+			Scan(&c.ID, &c.Name, &c.CreatedAt)
+		if err2 == nil {
+			return &c, nil
+		}
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &Customer{ID: id, Name: name, CreatedAt: now}, nil
+}
+
+func (r *SQLiteRepository) DeleteCustomer(id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE time_entries SET project_id = NULL WHERE project_id IN (SELECT id FROM projects WHERE customer_id = ?)", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM projects WHERE customer_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM customers WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *SQLiteRepository) CreateProject(custID int64, name string, rate, budgetHours, budgetCost float64, color string) (*Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -287,6 +351,96 @@ func (r *SQLiteRepository) GetProject(id int64) (*Project, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (r *SQLiteRepository) DeleteProject(id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE time_entries SET project_id = NULL WHERE project_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *SQLiteRepository) ClearAllDemoData() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	demoNames := []string{"Acme Corporation", "Starlight Media", "Acme Corp"}
+	placeholders := strings.Repeat("?,", len(demoNames))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]interface{}, len(demoNames))
+	for i, name := range demoNames {
+		args[i] = name
+	}
+
+	// 1. Delete seeded demo sample entries if they exist
+	queryDeleteDemoEntries := fmt.Sprintf(`
+		DELETE FROM time_entries 
+		WHERE task_name IN ('Figma Wireframing & Layout', 'Cloudflare SSL & DNS check')
+		  AND project_id IN (
+			SELECT p.id FROM projects p 
+			JOIN customers c ON p.customer_id = c.id 
+			WHERE c.name IN (%s)
+		  )
+	`, placeholders)
+	if _, err := tx.Exec(queryDeleteDemoEntries, args...); err != nil {
+		return err
+	}
+
+	// 2. Unlink any remaining time entries referencing demo projects so user records are preserved
+	queryUnlink := fmt.Sprintf(`
+		UPDATE time_entries 
+		SET project_id = NULL 
+		WHERE project_id IN (
+			SELECT p.id FROM projects p 
+			JOIN customers c ON p.customer_id = c.id 
+			WHERE c.name IN (%s)
+		)
+	`, placeholders)
+	if _, err := tx.Exec(queryUnlink, args...); err != nil {
+		return err
+	}
+
+	// 3. Delete projects belonging to demo customers
+	queryDeleteProjects := fmt.Sprintf(`
+		DELETE FROM projects 
+		WHERE customer_id IN (
+			SELECT id FROM customers 
+			WHERE name IN (%s)
+		)
+	`, placeholders)
+	if _, err := tx.Exec(queryDeleteProjects, args...); err != nil {
+		return err
+	}
+
+	// 4. Delete demo customers
+	queryDeleteCustomers := fmt.Sprintf(`
+		DELETE FROM customers 
+		WHERE name IN (%s)
+	`, placeholders)
+	if _, err := tx.Exec(queryDeleteCustomers, args...); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *SQLiteRepository) StartTimeEntry(projectID *int64, taskName string, isBillable bool) (*TimeEntry, error) {

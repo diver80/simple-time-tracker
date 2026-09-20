@@ -668,3 +668,189 @@ func TestMonthFilterCustomerProjectMismatch(t *testing.T) {
 		t.Errorf("no filter failed: expected 2 entries, got %d", len(entries))
 	}
 }
+
+func TestRepositoryDeleteProject(t *testing.T) {
+	repo, _ := NewRepository(":memory:")
+	defer repo.Close()
+
+	cust, _ := repo.CreateCustomer("Test Cust")
+	proj, _ := repo.CreateProject(cust.ID, "Test Proj", 100, 10, 1000, "#3B82F6")
+
+	now := time.Now().UTC()
+	start := now.Add(-1 * time.Hour)
+	entry, err := repo.CreateManualEntry(&TimeEntry{
+		TaskName:    "Work",
+		StartedAt:   start,
+		EndedAt:     &now,
+		DurationSec: 3600,
+		ProjectID:   &proj.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateManualEntry failed: %v", err)
+	}
+
+	err = repo.DeleteProject(proj.ID)
+	if err != nil {
+		t.Fatalf("DeleteProject failed: %v", err)
+	}
+
+	// Verify project is deleted
+	p, err := repo.GetProject(proj.ID)
+	if err == nil && p != nil {
+		t.Fatalf("expected project to be deleted, found: %v", p)
+	}
+
+	// Verify time entry preserved with project_id set to null
+	e, _ := repo.GetEntry(entry.ID)
+	if e == nil || e.ProjectID != nil {
+		t.Fatalf("expected time entry project_id to be null, got: %v", e)
+	}
+}
+
+func TestRepositoryDeleteCustomer(t *testing.T) {
+	repo, _ := NewRepository(":memory:")
+	defer repo.Close()
+
+	cust, _ := repo.CreateCustomer("Customer To Delete")
+	proj, _ := repo.CreateProject(cust.ID, "Project To Delete", 120, 20, 2400, "#3B82F6")
+
+	now := time.Now().UTC()
+	start := now.Add(-2 * time.Hour)
+	entry, err := repo.CreateManualEntry(&TimeEntry{
+		TaskName:    "Client Work",
+		StartedAt:   start,
+		EndedAt:     &now,
+		DurationSec: 7200,
+		ProjectID:   &proj.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateManualEntry failed: %v", err)
+	}
+
+	err = repo.DeleteCustomer(cust.ID)
+	if err != nil {
+		t.Fatalf("DeleteCustomer failed: %v", err)
+	}
+
+	// Verify customer is deleted
+	c, err := repo.GetCustomer(cust.ID)
+	if err == nil && c != nil {
+		t.Fatalf("expected customer to be deleted, found: %v", c)
+	}
+
+	// Verify project is deleted
+	p, err := repo.GetProject(proj.ID)
+	if err == nil && p != nil {
+		t.Fatalf("expected project to be deleted, found: %v", p)
+	}
+
+	// Verify time entry preserved with project_id set to null
+	e, _ := repo.GetEntry(entry.ID)
+	if e == nil || e.ProjectID != nil {
+		t.Fatalf("expected time entry project_id to be null, got: %v", e)
+	}
+}
+
+func TestRepositoryClearAllDemoData(t *testing.T) {
+	repo, _ := NewRepository(":memory:")
+	defer repo.Close()
+
+	c1, _ := repo.CreateCustomer("Acme Corporation")
+	p1, _ := repo.CreateProject(c1.ID, "Web Redesign", 125, 40, 5000, "#3B82F6")
+	c2, _ := repo.CreateCustomer("Real Customer")
+	repo.CreateProject(c2.ID, "Real Project", 150, 20, 3000, "#10B981")
+	c3, _ := repo.CreateCustomer("Starlight Media")
+	p3, _ := repo.CreateProject(c3.ID, "Mobile App", 140, 50, 7000, "#8B5CF6")
+	c4, _ := repo.CreateCustomer("Acme Corp")
+	_, _ = repo.CreateProject(c4.ID, "Brand Guide", 110, 10, 1100, "#10B981")
+
+	now := time.Now().UTC()
+	// Demo seeded entries
+	start1 := now.Add(-3 * time.Hour)
+	end1 := now.Add(-1 * time.Hour)
+	e1, err := repo.CreateManualEntry(&TimeEntry{
+		TaskName:    "Figma Wireframing & Layout",
+		StartedAt:   start1,
+		EndedAt:     &end1,
+		DurationSec: 5400,
+		ProjectID:   &p1.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateManualEntry e1 failed: %v", err)
+	}
+	// User entry on demo project
+	startUser := now.Add(-1 * time.Hour)
+	eUser, err := repo.CreateManualEntry(&TimeEntry{
+		TaskName:    "Real User Work on Demo Project",
+		StartedAt:   startUser,
+		EndedAt:     &now,
+		DurationSec: 3600,
+		ProjectID:   &p3.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateManualEntry eUser failed: %v", err)
+	}
+
+	err = repo.ClearAllDemoData()
+	if err != nil {
+		t.Fatalf("ClearAllDemoData failed: %v", err)
+	}
+
+	custs, _ := repo.ListCustomers()
+	if len(custs) != 1 || custs[0].Name != "Real Customer" {
+		t.Fatalf("expected only Real Customer to remain, got %v", custs)
+	}
+
+	projs, _ := repo.ListProjects(nil)
+	if len(projs) != 1 || projs[0].Name != "Real Project" {
+		t.Fatalf("expected only Real Project to remain, got %v", projs)
+	}
+
+	// Demo seed entry should be removed
+	e1Check, _ := repo.GetEntry(e1.ID)
+	if e1Check != nil {
+		t.Fatalf("expected seeded demo entry to be purged, found: %v", e1Check)
+	}
+
+	// User booking on demo project should be preserved but unlinked (project_id == nil)
+	eUserCheck, _ := repo.GetEntry(eUser.ID)
+	if eUserCheck == nil || eUserCheck.ProjectID != nil {
+		t.Fatalf("expected user entry to be preserved with project_id nil, got: %v", eUserCheck)
+	}
+}
+
+func TestRepositoryCreateCustomerIfNotExists(t *testing.T) {
+	repo, _ := NewRepository(":memory:")
+	defer repo.Close()
+
+	// Empty customer name should fail
+	_, err := repo.CreateCustomerIfNotExists("")
+	if err == nil {
+		t.Fatalf("expected error for empty name, got nil")
+	}
+
+	// First call creates customer
+	c1, err := repo.CreateCustomerIfNotExists("New Customer")
+	if err != nil {
+		t.Fatalf("CreateCustomerIfNotExists failed: %v", err)
+	}
+	if c1.ID == 0 || c1.Name != "New Customer" {
+		t.Fatalf("unexpected customer created: %+v", c1)
+	}
+
+	// Second call with same name returns existing customer
+	c2, err := repo.CreateCustomerIfNotExists("New Customer")
+	if err != nil {
+		t.Fatalf("second call to CreateCustomerIfNotExists failed: %v", err)
+	}
+	if c2.ID != c1.ID || c2.Name != c1.Name {
+		t.Fatalf("expected same customer ID %d, got %d", c1.ID, c2.ID)
+	}
+
+	// Verify customer count is still 1
+	list, _ := repo.ListCustomers()
+	if len(list) != 1 {
+		t.Fatalf("expected 1 customer, found %d", len(list))
+	}
+}
+
