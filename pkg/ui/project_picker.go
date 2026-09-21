@@ -1,12 +1,23 @@
 package ui
 
 import (
+	"fmt"
 	"time-tracker/pkg/db"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/widget"
 )
+
+func formatProjectLabel(p *db.Project) string {
+	if p == nil {
+		return "(Kein Projekt)"
+	}
+	if p.CustomerName != "" {
+		return fmt.Sprintf("%s - %s", p.CustomerName, p.Name)
+	}
+	return p.Name
+}
 
 // ProjectPicker is a dropdown-like widget for selecting a project.
 type ProjectPicker struct {
