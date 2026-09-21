@@ -8,7 +8,7 @@ set -e
 APP_NAME="stt"
 APP_DISPLAY_NAME="Simple Time Tracker"
 BUNDLE_ID="com.avono.simple-time-tracker"
-VERSION="${VERSION:-1.0.5}"
+VERSION="${VERSION:-1.0.6}"
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}"
 DIST_DIR="$(pwd)/dist"
