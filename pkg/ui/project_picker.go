@@ -77,7 +77,8 @@ func (pp *ProjectPicker) Layout(ctx widget.Context, c geometry.Constraints) geom
 	w := c.ConstrainWidth(200)
 	h := float32(28)
 	if pp.isExpanded {
-		h = c.ConstrainHeight(float32(28 + len(pp.projects)*24))
+		// 1 row for "(Kein Projekt)" + len(pp.projects) project rows
+		h = c.ConstrainHeight(float32(28 + (1+len(pp.projects))*24))
 	}
 	return geometry.Sz(w, h)
 }
@@ -92,11 +93,8 @@ func (pp *ProjectPicker) Draw(ctx widget.Context, canvas widget.Canvas) {
 	canvas.StrokeRoundRect(btnRect, theme.InputBorder, 4, 1.0)
 
 	// Display selected project or placeholder
-	displayText := "(Kein Projekt)"
-	if pp.selectedProject != nil {
-		displayText = pp.selectedProject.Name
-	}
-	canvas.DrawText(displayText, geometry.NewRect(b.Min.X+6, b.Min.Y+4, b.Width()-20, 20), 11, theme.TextPrimary, false, widget.TextAlignLeft)
+	displayText := formatProjectLabel(pp.selectedProject)
+	canvas.DrawText(displayText, geometry.NewRect(b.Min.X+6, b.Min.Y+4, b.Width()-24, 20), 11, theme.TextPrimary, false, widget.TextAlignLeft)
 
 	// Dropdown arrow
 	arrowText := "v"
@@ -108,14 +106,26 @@ func (pp *ProjectPicker) Draw(ctx widget.Context, canvas widget.Canvas) {
 	// Dropdown menu if expanded
 	if pp.isExpanded {
 		menuY := b.Min.Y + 30
+
+		// Row 0: "(Kein Projekt)"
+		noneRect := geometry.NewRect(b.Min.X, menuY, b.Width(), 24)
+		noneBg := theme.InputBg
+		if pp.selectedProject == nil {
+			noneBg = widget.RGBA8(60, 72, 98, 255)
+		}
+		canvas.DrawRect(noneRect, noneBg)
+		canvas.DrawText("(Kein Projekt)", geometry.NewRect(noneRect.Min.X+8, noneRect.Min.Y+4, noneRect.Width()-16, 16), 10, theme.TextSecondary, false, widget.TextAlignLeft)
+
+		// Rows 1..N: Projects
 		for i, proj := range pp.projects {
-			itemRect := geometry.NewRect(b.Min.X, menuY+float32(i*24), b.Width(), 24)
+			itemRect := geometry.NewRect(b.Min.X, menuY+float32((i+1)*24), b.Width(), 24)
 			itemBg := theme.InputBg
 			if pp.selectedProject != nil && pp.selectedProject.ID == proj.ID {
 				itemBg = widget.RGBA8(60, 72, 98, 255)
 			}
 			canvas.DrawRect(itemRect, itemBg)
-			canvas.DrawText(proj.Name, geometry.NewRect(itemRect.Min.X+8, itemRect.Min.Y+4, itemRect.Width()-16, 16), 10, theme.TextPrimary, false, widget.TextAlignLeft)
+			itemText := formatProjectLabel(&proj)
+			canvas.DrawText(itemText, geometry.NewRect(itemRect.Min.X+8, itemRect.Min.Y+4, itemRect.Width()-16, 16), 10, theme.TextPrimary, false, widget.TextAlignLeft)
 		}
 	}
 }
@@ -133,8 +143,21 @@ func (pp *ProjectPicker) Event(ctx widget.Context, e event.Event) bool {
 
 		if pp.isExpanded && ev.MouseType == event.MousePress {
 			menuY := b.Min.Y + 30
+
+			// Row 0: "(Kein Projekt)"
+			noneRect := geometry.NewRect(b.Min.X, menuY, b.Width(), 24)
+			if noneRect.Contains(ev.Position) {
+				pp.selectedProject = nil
+				pp.isExpanded = false
+				if pp.onChange != nil {
+					pp.onChange(nil)
+				}
+				return true
+			}
+
+			// Rows 1..N: Projects
 			for i := range pp.projects {
-				itemRect := geometry.NewRect(b.Min.X, menuY+float32(i*24), b.Width(), 24)
+				itemRect := geometry.NewRect(b.Min.X, menuY+float32((i+1)*24), b.Width(), 24)
 				if itemRect.Contains(ev.Position) {
 					pp.selectedProject = &pp.projects[i]
 					pp.isExpanded = false
